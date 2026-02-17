@@ -38,6 +38,11 @@ class SetupRequest(BaseModel):  # [JS-W006.2]
     openai_api_key: str = ""
     google_api_key: str = ""
     models: list[str] | None = None
+    # 채널 봇 토큰
+    telegram_bot_token: str = ""
+    discord_bot_token: str = ""
+    slack_bot_token: str = ""
+    slack_app_token: str = ""
 
 
 @router.get("/status")  # [JS-W006.3]
@@ -81,6 +86,11 @@ async def complete_setup(request: SetupRequest) -> dict[str, str]:
 
     env_lines = _update_env_line(env_lines, "OPENAI_API_KEY", request.openai_api_key)
     env_lines = _update_env_line(env_lines, "GOOGLE_API_KEY", request.google_api_key)
+    # 채널 봇 토큰 저장
+    env_lines = _update_env_line(env_lines, "TELEGRAM_BOT_TOKEN", request.telegram_bot_token)
+    env_lines = _update_env_line(env_lines, "DISCORD_BOT_TOKEN", request.discord_bot_token)
+    env_lines = _update_env_line(env_lines, "SLACK_BOT_TOKEN", request.slack_bot_token)
+    env_lines = _update_env_line(env_lines, "SLACK_APP_TOKEN", request.slack_app_token)
     env_lines = _update_env_line(env_lines, "JEDISOS_FIRST_RUN", "false")
 
     _ENV_PATH.write_text("\n".join(env_lines) + "\n")

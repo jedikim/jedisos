@@ -25,6 +25,21 @@ router = APIRouter()
 _CONFIG_DIR = Path("config")
 _ENV_PATH = Path(".env")
 
+# [JS-W003.8] 웹 UI에서 수정 가능한 환경변수 키 목록
+_ALLOWED_ENV_KEYS: set[str] = {
+    "OPENAI_API_KEY",
+    "GOOGLE_API_KEY",
+    "HINDSIGHT_API_URL",
+    "SECURITY_MAX_REQUESTS_PER_MINUTE",
+    "DEBUG",
+    "LOG_LEVEL",
+    # 채널 봇 토큰
+    "TELEGRAM_BOT_TOKEN",
+    "DISCORD_BOT_TOKEN",
+    "SLACK_BOT_TOKEN",
+    "SLACK_APP_TOKEN",
+}
+
 
 class LLMSettingsUpdate(BaseModel):  # [JS-W003.1]
     """LLM 설정 업데이트 모델."""
@@ -110,14 +125,7 @@ async def get_env_keys() -> dict[str, Any]:
 
     값은 보안상 반환하지 않습니다.
     """
-    known_keys = [
-        "OPENAI_API_KEY",
-        "GOOGLE_API_KEY",
-        "HINDSIGHT_API_URL",
-        "SECURITY_MAX_REQUESTS_PER_MINUTE",
-        "DEBUG",
-        "LOG_LEVEL",
-    ]
+    known_keys = sorted(_ALLOWED_ENV_KEYS)
     # 실제 설정된 키 확인
     configured = []
     if _ENV_PATH.exists():
@@ -135,15 +143,7 @@ async def get_env_keys() -> dict[str, Any]:
 async def update_env_var(update: EnvUpdate) -> dict[str, str]:
     """환경변수를 .env 파일에 업데이트합니다."""
     # 허용된 키만
-    allowed = {
-        "OPENAI_API_KEY",
-        "GOOGLE_API_KEY",
-        "HINDSIGHT_API_URL",
-        "SECURITY_MAX_REQUESTS_PER_MINUTE",
-        "DEBUG",
-        "LOG_LEVEL",
-    }
-    if update.key not in allowed:
+    if update.key not in _ALLOWED_ENV_KEYS:
         raise HTTPException(status_code=400, detail=f"허용되지 않는 키입니다: {update.key}")
 
     # .env 파일 업데이트
