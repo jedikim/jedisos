@@ -261,5 +261,181 @@ def update() -> None:
         raise typer.Exit(1) from e
 
 
+
+# === Market 서브커맨드 === [JS-H001.8]
+market_app = typer.Typer(name="market", help="로컬 패키지 매니저", no_args_is_help=True)
+app.add_typer(market_app, name="market")
+
+
+def _get_tools_dir() -> Path:
+    """패키지 디렉토리를 환경변수 또는 기본값에서 가져옵니다."""
+    import os
+
+    return Path(os.environ.get("JEDISOS_TOOLS_DIR", "tools"))
+
+
+@market_app.command("list")
+def market_list(
+    package_type: Annotated[str | None, typer.Option("--type", "-t", help="패키지 유형 필터")] = None,
+) -> None:
+    """설치된 패키지 목록을 표시합니다."""
+    from jedisos.marketplace.manager import LocalPackageManager
+    from jedisos.marketplace.models import PackageType as PT
+
+    mgr = LocalPackageManager(_get_tools_dir())
+
+    pt = None
+    if package_type:
+        try:
+            pt = PT(package_type)
+        except ValueError:
+            err_console.print(f"알 수 없는 유형: {package_type}", style="red")
+            raise typer.Exit(1) from None
+
+    packages = mgr.list_packages(package_type=pt)
+
+    if not packages:
+        console.print("설치된 패키지가 없습니다.", style="yellow")
+        return
+
+    table = Table(title="설치된 패키지")
+    table.add_column("이름", style="cyan")
+    table.add_column("버전")
+    table.add_column("유형", style="green")
+    table.add_column("설명")
+
+    for pkg in packages:
+        table.add_row(pkg.meta.name, pkg.meta.version, pkg.meta.type.value, pkg.meta.description)
+
+    console.print(table)
+
+
+@market_app.command("search")
+def market_search(
+    query: Annotated[str, typer.Argument(help="검색어")],
+) -> None:
+    """패키지를 검색합니다 (이름/설명/태그)."""
+    from jedisos.marketplace.manager import LocalPackageManager
+
+    mgr = LocalPackageManager(_get_tools_dir())
+    results = mgr.search(query)
+
+    if not results:
+        console.print(f"'{query}'에 대한 결과가 없습니다.", style="yellow")
+        return
+
+    table = Table(title=f"검색 결과: '{query}'")
+    table.add_column("이름", style="cyan")
+    table.add_column("버전")
+    table.add_column("유형", style="green")
+    table.add_column("설명")
+
+    for pkg in results:
+        table.add_row(pkg.meta.name, pkg.meta.version, pkg.meta.type.value, pkg.meta.description)
+
+    console.print(table)
+
+
+@market_app.command("info")
+def market_info(
+    name: Annotated[str, typer.Argument(help="패키지 이름")],
+) -> None:
+    """패키지 상세 정보를 표시합니다."""
+    from jedisos.marketplace.manager import LocalPackageManager
+
+    mgr = LocalPackageManager(_get_tools_dir())
+    pkg = mgr.get_package(name)
+
+    if not pkg:
+        err_console.print(f"패키지를 찾을 수 없습니다: {name}", style="red")
+        raise typer.Exit(1)
+
+    console.print(Panel(
+        f"[bold]{pkg.meta.name}[/bold] v{pkg.meta.version}\n\n"
+        f"유형: {pkg.meta.type.value}\n"
+        f"설명: {pkg.meta.description}\n"
+        f"라이선스: {pkg.meta.license}\n"
+        f"작성자: {pkg.meta.author}\n"
+        f"태그: {', '.join(pkg.meta.tags) if pkg.meta.tags else '-'}\n"
+        f"경로: {pkg.directory}",
+        title="패키지 정보",
+        border_style="cyan",
+    ))
+
+
+@market_app.command("validate")
+def market_validate(
+    directory: Annotated[Path, typer.Argument(help="패키지 디렉토리")],
+) -> None:
+    """패키지를 검증합니다."""
+    from jedisos.marketplace.validator import PackageValidator
+
+    if not directory.exists():
+        err_console.print(f"디렉토리를 찾을 수 없습니다: {directory}", style="red")
+        raise typer.Exit(1)
+
+    validator = PackageValidator()
+    result = asyncio.run(validator.validate(directory))
+
+    if result.passed:
+        console.print(f"[green]검증 통과:[/green] {result.package_name}")
+    else:
+        console.print(f"[red]검증 실패:[/red] {result.package_name}")
+        for error in result.errors:
+            console.print(f"  [red]x[/red] {error}")
+
+    for warning in result.warnings:
+        console.print(f"  [yellow]![/yellow] {warning}")
+
+    if not result.passed:
+        raise typer.Exit(1)
+
+
+@market_app.command("install")
+def market_install(
+    directory: Annotated[Path, typer.Argument(help="설치할 패키지 디렉토리")],
+    force: Annotated[bool, typer.Option("--force", "-f", help="이미 존재하면 덮어쓰기")] = False,
+) -> None:
+    """로컬 디렉토리에서 패키지를 설치합니다."""
+    from jedisos.marketplace.manager import LocalPackageManager
+
+    if not directory.exists():
+        err_console.print(f"디렉토리를 찾을 수 없습니다: {directory}", style="red")
+        raise typer.Exit(1)
+
+    mgr = LocalPackageManager(_get_tools_dir())
+    try:
+        result = mgr.install(directory, force=force)
+        console.print(f"[green]설치 완료:[/green] {result['name']} v{result['version']}")
+        console.print(f"  경로: {result['dir']}")
+    except Exception as e:
+        err_console.print(f"설치 실패: {e}", style="red")
+        raise typer.Exit(1) from e
+
+
+@market_app.command("remove")
+def market_remove(
+    name: Annotated[str, typer.Argument(help="삭제할 패키지 이름")],
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="확인 없이 삭제")] = False,
+) -> None:
+    """패키지를 삭제합니다."""
+    from jedisos.marketplace.manager import LocalPackageManager
+
+    mgr = LocalPackageManager(_get_tools_dir())
+
+    if not yes:
+        confirm = typer.confirm(f"'{name}' 패키지를 삭제할까요?")
+        if not confirm:
+            console.print("삭제를 취소합니다.", style="yellow")
+            raise typer.Exit()
+
+    try:
+        result = mgr.remove(name)
+        console.print(f"[green]삭제 완료:[/green] {result['name']}")
+    except Exception as e:
+        err_console.print(f"삭제 실패: {e}", style="red")
+        raise typer.Exit(1) from e
+
+
 if __name__ == "__main__":
     app()

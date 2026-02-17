@@ -356,3 +356,53 @@ class TestLocalPackageManager:  # [JS-T014.7]
         mgr = LocalPackageManager(tmp_path)
         with pytest.raises(Exception, match="찾을 수 없"):
             mgr.remove("nonexistent")
+
+
+from typer.testing import CliRunner
+
+from jedisos.cli.main import app
+
+runner = CliRunner()
+
+
+class TestMarketCLI:  # [JS-T014.8]
+    """CLI market 서브커맨드 테스트."""
+
+    def test_market_list_empty(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("JEDISOS_TOOLS_DIR", str(tmp_path))
+        result = runner.invoke(app, ["market", "list"])
+        assert result.exit_code == 0
+        assert "패키지가 없습니다" in result.stdout
+
+    def test_market_list_with_packages(self, tmp_path, monkeypatch):
+        _create_package(tmp_path, "skill", "weather")
+        monkeypatch.setenv("JEDISOS_TOOLS_DIR", str(tmp_path))
+        result = runner.invoke(app, ["market", "list"])
+        assert result.exit_code == 0
+        assert "weather" in result.stdout
+
+    def test_market_search(self, tmp_path, monkeypatch):
+        _create_package(tmp_path, "skill", "weather", {"description": "날씨 조회"})
+        monkeypatch.setenv("JEDISOS_TOOLS_DIR", str(tmp_path))
+        result = runner.invoke(app, ["market", "search", "weather"])
+        assert result.exit_code == 0
+        assert "weather" in result.stdout
+
+    def test_market_info(self, tmp_path, monkeypatch):
+        _create_package(tmp_path, "skill", "weather")
+        monkeypatch.setenv("JEDISOS_TOOLS_DIR", str(tmp_path))
+        result = runner.invoke(app, ["market", "info", "weather"])
+        assert result.exit_code == 0
+        assert "weather" in result.stdout
+
+    def test_market_info_not_found(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("JEDISOS_TOOLS_DIR", str(tmp_path))
+        result = runner.invoke(app, ["market", "info", "nonexistent"])
+        assert result.exit_code == 1
+
+    def test_market_remove(self, tmp_path, monkeypatch):
+        _create_package(tmp_path, "skill", "weather")
+        monkeypatch.setenv("JEDISOS_TOOLS_DIR", str(tmp_path))
+        result = runner.invoke(app, ["market", "remove", "weather", "--yes"])
+        assert result.exit_code == 0
+        assert "삭제" in result.stdout
