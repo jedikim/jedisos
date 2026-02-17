@@ -54,9 +54,8 @@ modified: 2026-02-18
          x-transition:leave="transition ease-in duration-200"
          x-transition:leave-start="opacity-100 translate-y-0"
          x-transition:leave-end="opacity-0 translate-y-2"
-         class="fixed top-4 right-4 z-50 max-w-sm"
-         :class="toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'"
-         class="rounded-lg border px-4 py-3 shadow-lg">
+         class="fixed top-4 right-4 z-50 max-w-sm rounded-lg border px-4 py-3 shadow-lg"
+         :class="toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'">
         <div class="flex items-center gap-2">
             <template x-if="toast.type === 'success'">
                 <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
@@ -402,8 +401,7 @@ modified: 2026-02-18
                                       class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">미설정</span>
                             </div>
                             <div class="flex-1 flex items-center gap-2">
-                                <input type="password" :x-model="'envValues.' + envVar.key"
-                                       x-model="envValues[envVar.key]"
+                                <input type="password" x-model="envValues[envVar.key]"
                                        :placeholder="envVar.configured ? '********' : '값을 입력하세요'"
                                        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
                                 <button @click="saveEnvVar(envVar.key, envValues[envVar.key])"
@@ -693,8 +691,8 @@ modified: 2026-02-18
                     <div class="bg-gray-50 rounded-lg p-3">
                         <div class="text-xs text-gray-500 mb-1">Hindsight</div>
                         <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full" :class="monitoring.status.services?.hindsight?.status === 'connected' ? 'bg-green-500' : 'bg-red-500'"></span>
-                            <span class="text-sm font-semibold text-gray-900" x-text="monitoring.status.services?.hindsight?.status || '-'"></span>
+                            <span class="w-2 h-2 rounded-full" :class="monitoring.status.services?.hindsight === 'ok' ? 'bg-green-500' : 'bg-red-500'"></span>
+                            <span class="text-sm font-semibold text-gray-900" x-text="monitoring.status.services?.hindsight || '-'"></span>
                         </div>
                     </div>
                     <div class="bg-gray-50 rounded-lg p-3">

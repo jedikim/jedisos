@@ -220,7 +220,7 @@ function app() {
                     discord_bot_token: this.setup.discordToken,
                     slack_bot_token: this.setup.slackBotToken,
                     slack_app_token: this.setup.slackAppToken,
-                    models: this.setup.models,
+                    models: this.setup.models.split(',').map(s => s.trim()).filter(Boolean),
                 });
                 this.showToast('설정이 완료되었습니다');
                 this.setup.isFirstRun = false;
