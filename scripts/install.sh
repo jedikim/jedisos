@@ -50,6 +50,12 @@ if [ -d "$JEDISOS_HOME/.git" ]; then
     echo "[..] Updating existing installation..."
     cd "$JEDISOS_HOME"
     git pull --quiet
+elif [ -d "$JEDISOS_HOME" ]; then
+    echo "[..] Cleaning up previous install..."
+    rm -rf "$JEDISOS_HOME"
+    echo "[..] Downloading JediSOS..."
+    git clone --quiet "$REPO_URL" "$JEDISOS_HOME"
+    cd "$JEDISOS_HOME"
 else
     echo "[..] Downloading JediSOS..."
     git clone --quiet "$REPO_URL" "$JEDISOS_HOME"
