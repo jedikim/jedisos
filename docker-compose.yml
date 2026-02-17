@@ -1,0 +1,61 @@
+# docker-compose.yml
+# JediSOS 프로덕션 서비스
+# 사용법: docker compose up -d
+#
+# [JS-X002] docker-compose.yml
+# version: 1.0.0
+# created: 2026-02-18
+
+services:
+  # PostgreSQL + pgvector
+  postgres:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jedisos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-hindsight}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jedisos}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Hindsight 메모리 서버
+  hindsight:
+    image: ghcr.io/vectorize-io/hindsight:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HINDSIGHT_API_DATABASE_URL: postgresql://${POSTGRES_USER:-jedisos}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-hindsight}
+      HINDSIGHT_API_LLM_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "${HINDSIGHT_PORT:-8888}:8888"
+      - "${HINDSIGHT_UI_PORT:-9999}:9999"
+
+  # JediSOS 메인 앱 (API + Web UI)
+  jedisos:
+    image: ghcr.io/jedikim/jedisos:${JEDISOS_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      hindsight:
+        condition: service_started
+    environment:
+      HINDSIGHT_API_URL: http://hindsight:8888
+      JEDISOS_LLM_CONFIG: /config/llm_config.yaml
+      JEDISOS_MCP_CONFIG: /config/mcp_servers.json
+    env_file:
+      - .env
+    ports:
+      - "${JEDISOS_PORT:-8080}:8080"
+    volumes:
+      - ./config:/config:ro
+      - jedisos_data:/data
+
+volumes:
+  postgres_data:
+  jedisos_data:
