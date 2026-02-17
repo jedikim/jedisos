@@ -1,0 +1,17 @@
+"""{{ tool_name }} - JediSOS 자동 생성 Data Processor Skill
+
+version: 1.0.0
+created: {{ timestamp }}
+author: jedisos-agent (auto-generated)
+"""
+import json
+
+from jedisos.forge.decorator import tool
+
+{% for func in functions %}
+@tool(name="{{ func.name }}", description="{{ func.description }}")
+async def {{ func.name }}({{ func.parameters }}) -> {{ func.return_type }}:
+    """{{ func.docstring }}"""
+    {{ func.implementation }}
+
+{% endfor %}
