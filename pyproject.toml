@@ -25,6 +25,9 @@ dependencies = [
     "cryptography>=46.0.5",
     "keyring>=25.7.0",
     "nest-asyncio>=1.6.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "python-multipart>=0.0.20",
 ]
 
 [project.optional-dependencies]

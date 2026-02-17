@@ -205,14 +205,16 @@ class TestCLIServe:  # [JS-T010.6]
     """서버 명령 테스트."""
 
     def test_serve_shows_info(self):
-        result = runner.invoke(app, ["serve"])
-        assert result.exit_code == 0
-        assert "8080" in result.output
+        with patch("jedisos.web.app.run_server"):
+            result = runner.invoke(app, ["serve"])
+            assert result.exit_code == 0
+            assert "8080" in result.output
 
     def test_serve_custom_port(self):
-        result = runner.invoke(app, ["serve", "--port", "9090"])
-        assert result.exit_code == 0
-        assert "9090" in result.output
+        with patch("jedisos.web.app.run_server"):
+            result = runner.invoke(app, ["serve", "--port", "9090"])
+            assert result.exit_code == 0
+            assert "9090" in result.output
 
 
 class TestCLIUpdate:  # [JS-T010.7]

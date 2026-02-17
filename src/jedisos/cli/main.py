@@ -204,21 +204,19 @@ def serve(
     host: Annotated[str, typer.Option("--host", "-h", help="바인딩 호스트")] = "0.0.0.0",  # nosec B104
     port: Annotated[int, typer.Option("--port", "-p", help="포트")] = 8080,
 ) -> None:
-    """JediSOS 서버를 실행합니다. (웹 UI + API)
-
-    Phase 9 (Web UI) 구현 후 활성화됩니다.
-    """
+    """JediSOS 웹 서버를 실행합니다. (API + Web UI)"""
     console.print(
         Panel(
             f"JediSOS 서버가 [bold]{host}:{port}[/bold]에서 시작됩니다.\n"
-            "웹 UI는 Phase 9에서 구현 예정입니다.",
+            f"웹 UI: http://{host}:{port}\n"
+            f"API 문서: http://{host}:{port}/docs",
             title="JediSOS Server",
             border_style="blue",
         )
     )
-    logger.info("server_start_requested", host=host, port=port)
-    # Phase 9에서 FastAPI 앱 실행 추가 예정
-    console.print("[yellow]웹 서버는 Phase 9에서 구현됩니다.[/yellow]")
+    from jedisos.web.app import run_server
+
+    run_server(host=host, port=port)
 
 
 @app.command()  # [JS-H001.7]
