@@ -38,3 +38,7 @@ class SecurityError(JedisosError):  # [JS-A003.7]
 
 class AgentError(JedisosError):  # [JS-A003.8]
     """에이전트 실행 관련 에러."""
+
+
+class MarketplaceError(JedisosError):  # [JS-A003.9]
+    """마켓플레이스/패키지 관련 에러."""

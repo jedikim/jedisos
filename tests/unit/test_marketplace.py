@@ -17,6 +17,7 @@ from jedisos.marketplace.models import (
     PackageMeta,
     PackageType,
 )
+from jedisos.marketplace.manager import LocalPackageManager
 from jedisos.marketplace.scanner import PackageScanner
 from jedisos.marketplace.validator import PackageValidator, ValidationResult
 
@@ -245,3 +246,113 @@ class TestPackageValidator:  # [JS-T014.6]
         assert isinstance(result.checks, dict)
         assert isinstance(result.errors, list)
         assert isinstance(result.warnings, list)
+
+
+class TestLocalPackageManager:  # [JS-T014.7]
+    """LocalPackageManager 테스트."""
+
+    def test_list_empty(self, tmp_path):
+        mgr = LocalPackageManager(tmp_path)
+        assert mgr.list_packages() == []
+
+    def test_list_packages(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        _create_package(tmp_path, "prompt_pack", "coding")
+        mgr = LocalPackageManager(tmp_path)
+        result = mgr.list_packages()
+        assert len(result) == 2
+
+    def test_list_by_type(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        _create_package(tmp_path, "skill", "calculator")
+        _create_package(tmp_path, "prompt_pack", "coding")
+        mgr = LocalPackageManager(tmp_path)
+        result = mgr.list_packages(package_type=PackageType.SKILL)
+        assert len(result) == 2
+
+    def test_search_by_name(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        _create_package(tmp_path, "skill", "calculator")
+        mgr = LocalPackageManager(tmp_path)
+        result = mgr.search("weath")
+        assert len(result) == 1
+        assert result[0].meta.name == "weather"
+
+    def test_search_by_tag(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather", {"tags": ["api", "weather"]})
+        _create_package(tmp_path, "skill", "calc", {"tags": ["math"]})
+        mgr = LocalPackageManager(tmp_path)
+        result = mgr.search("api")
+        assert len(result) == 1
+
+    def test_search_by_description(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather", {"description": "날씨 정보를 조회합니다"})
+        _create_package(tmp_path, "skill", "calc", {"description": "계산기"})
+        mgr = LocalPackageManager(tmp_path)
+        result = mgr.search("날씨")
+        assert len(result) == 1
+
+    def test_get_package(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        mgr = LocalPackageManager(tmp_path)
+        info = mgr.get_package("weather")
+        assert info is not None
+        assert info.meta.name == "weather"
+
+    def test_get_package_not_found(self, tmp_path):
+        mgr = LocalPackageManager(tmp_path)
+        assert mgr.get_package("nonexistent") is None
+
+    def test_install_from_local(self, tmp_path):
+        source = tmp_path / "source" / "my-tool"
+        source.mkdir(parents=True)
+        meta = {"name": "my-tool", "version": "1.0.0", "description": "내 도구", "type": "skill", "license": "MIT"}
+        (source / "jedisos-package.yaml").write_text(yaml.dump(meta, allow_unicode=True))
+        (source / "tool.py").write_text(
+            'from jedisos.forge.decorator import tool\n\n'
+            '@tool(name="my-tool", description="내 도구")\n'
+            'async def run(x: str) -> str:\n'
+            '    return x\n'
+        )
+
+        tools_dir = tmp_path / "tools"
+        mgr = LocalPackageManager(tools_dir)
+        result = mgr.install(source)
+        assert result["status"] == "installed"
+        assert (tools_dir / "skills" / "my-tool" / "jedisos-package.yaml").exists()
+
+    def test_install_already_exists(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        source = tmp_path / "source" / "weather"
+        source.mkdir(parents=True)
+        meta = {"name": "weather", "version": "2.0.0", "description": "날씨 v2", "type": "skill", "license": "MIT"}
+        (source / "jedisos-package.yaml").write_text(yaml.dump(meta, allow_unicode=True))
+
+        mgr = LocalPackageManager(tmp_path)
+        with pytest.raises(Exception, match="이미 설치"):
+            mgr.install(source)
+
+    def test_install_force_overwrite(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        source = tmp_path / "source" / "weather"
+        source.mkdir(parents=True)
+        meta = {"name": "weather", "version": "2.0.0", "description": "날씨 v2", "type": "skill", "license": "MIT"}
+        (source / "jedisos-package.yaml").write_text(yaml.dump(meta, allow_unicode=True))
+
+        mgr = LocalPackageManager(tmp_path)
+        result = mgr.install(source, force=True)
+        assert result["status"] == "installed"
+        assert result["version"] == "2.0.0"
+
+    def test_remove_package(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        mgr = LocalPackageManager(tmp_path)
+        assert mgr.get_package("weather") is not None
+        result = mgr.remove("weather")
+        assert result["status"] == "removed"
+        assert mgr.get_package("weather") is None
+
+    def test_remove_not_found(self, tmp_path):
+        mgr = LocalPackageManager(tmp_path)
+        with pytest.raises(Exception, match="찾을 수 없"):
+            mgr.remove("nonexistent")
