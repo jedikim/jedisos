@@ -230,8 +230,9 @@ class TestShouldContinue:  # [JS-T005.5]
 class TestExecuteTools:  # [JS-T005.6]
     @pytest.mark.asyncio
     async def test_execute_tools_increments_count(self, react_agent):
+        """도구 호출 없는 메시지일 때 카운트만 증가."""
         state: AgentState = {
-            "messages": [],
+            "messages": [MagicMock(tool_calls=None)],
             "memory_context": "",
             "bank_id": "test-bank",
             "tool_call_count": 3,

@@ -46,11 +46,13 @@ class ReActAgent:  # [JS-E001.2]
         llm: LLMRouter,
         tools: list[Any] | None = None,
         identity_prompt: str = "",
+        tool_executor: Any | None = None,
     ) -> None:
         self.memory = memory
         self.llm = llm
         self.tools = tools or []
         self.identity_prompt = identity_prompt
+        self.tool_executor = tool_executor
         self.graph = self._build_graph()
 
     def _build_graph(self) -> Any:  # [JS-E001.3]
@@ -125,9 +127,77 @@ class ReActAgent:  # [JS-E001.2]
         return "retain_memory"
 
     async def _execute_tools(self, state: AgentState) -> dict:  # [JS-E001.7]
-        """도구 실행. 실제 구현은 Phase 5에서 MCP 연동 후 완성."""
+        """도구 실행. tool_executor 또는 내장 도구 핸들러를 통해 실행."""
+        import json
+
         count = state.get("tool_call_count", 0)
-        return {"tool_call_count": count + 1}
+        last = state["messages"][-1]
+        tool_calls = getattr(last, "tool_calls", None) or (
+            last.get("tool_calls") if isinstance(last, dict) else None
+        )
+
+        if not tool_calls:
+            return {"tool_call_count": count + 1}
+
+        tool_results: list[dict[str, Any]] = []
+        for tc in tool_calls:
+            tool_name, tool_id, args = self._parse_tool_call(tc)
+            result = await self._call_tool(tool_name, args)
+
+            tool_results.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_id,
+                    "content": json.dumps(result, ensure_ascii=False)
+                    if isinstance(result, dict)
+                    else str(result),
+                }
+            )
+            logger.info("tool_executed", tool=tool_name, call_id=tool_id)
+
+        return {"messages": tool_results, "tool_call_count": count + 1}
+
+    @staticmethod
+    def _parse_tool_call(tc: Any) -> tuple[str, str, dict[str, Any]]:  # [JS-E001.7b]
+        """도구 호출을 파싱합니다. OpenAI/LangGraph 형식 모두 지원."""
+        import json
+
+        if isinstance(tc, dict):
+            # LangGraph ToolCall 형식: {"name": ..., "args": ..., "id": ...}
+            if "name" in tc and "args" in tc:
+                return tc["name"], tc.get("id", ""), tc.get("args", {})
+            # OpenAI 형식: {"id": ..., "function": {"name": ..., "arguments": ...}}
+            func = tc.get("function", {})
+            raw_args = func.get("arguments", "{}")
+            args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            return func.get("name", ""), tc.get("id", ""), args
+
+        # 객체 형식 (LangGraph ToolCall 또는 OpenAI)
+        name = getattr(tc, "name", "")
+        tool_id = getattr(tc, "id", "")
+        args = getattr(tc, "args", None)
+        if args is not None:
+            return name, tool_id, args if isinstance(args, dict) else {}
+
+        # OpenAI 객체: function.name, function.arguments
+        func = getattr(tc, "function", None)
+        if func:
+            name = getattr(func, "name", "")
+            raw_args = getattr(func, "arguments", "{}")
+            args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            return name, tool_id, args
+
+        return name, tool_id, {}
+
+    async def _call_tool(self, name: str, arguments: dict[str, Any]) -> Any:  # [JS-E001.7a]
+        """단일 도구를 호출합니다. tool_executor가 있으면 위임."""
+        if self.tool_executor:
+            try:
+                return await self.tool_executor(name, arguments)
+            except Exception as e:
+                logger.error("tool_execution_failed", tool=name, error=str(e))
+                return {"error": str(e)}
+        return {"error": f"도구 '{name}'의 실행기가 설정되지 않았습니다."}
 
     async def _retain_memory(self, state: AgentState) -> dict:  # [JS-E001.8]
         """대화 내용을 메모리에 저장."""
