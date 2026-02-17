@@ -19,6 +19,8 @@ from langgraph.graph.message import add_messages
 if TYPE_CHECKING:
     from jedisos.llm.router import LLMRouter
     from jedisos.memory.hindsight import HindsightMemory
+    from jedisos.security.audit import AuditLogger
+    from jedisos.security.pdp import PolicyDecisionPoint
 
 logger = structlog.get_logger()
 
@@ -47,12 +49,16 @@ class ReActAgent:  # [JS-E001.2]
         tools: list[Any] | None = None,
         identity_prompt: str = "",
         tool_executor: Any | None = None,
+        pdp: PolicyDecisionPoint | None = None,
+        audit: AuditLogger | None = None,
     ) -> None:
         self.memory = memory
         self.llm = llm
         self.tools = tools or []
         self.identity_prompt = identity_prompt
         self.tool_executor = tool_executor
+        self.pdp = pdp
+        self.audit = audit
         self.graph = self._build_graph()
 
     def _build_graph(self) -> Any:  # [JS-E001.3]
@@ -190,7 +196,17 @@ class ReActAgent:  # [JS-E001.2]
         return name, tool_id, {}
 
     async def _call_tool(self, name: str, arguments: dict[str, Any]) -> Any:  # [JS-E001.7a]
-        """단일 도구를 호출합니다. tool_executor가 있으면 위임."""
+        """단일 도구를 호출합니다. PDP 검사 후 tool_executor에 위임."""
+        # PDP 정책 검사
+        if self.pdp:
+            allowed, reason = self.pdp.check_tool_access(name)
+            if self.audit:
+                self.audit.log_tool_call(tool_name=name, allowed=allowed, reason=reason)
+            if not allowed:
+                return {"error": reason}
+        elif self.audit:
+            self.audit.log_tool_call(tool_name=name, allowed=True, reason="PDP 미설정")
+
         if self.tool_executor:
             try:
                 return await self.tool_executor(name, arguments)
