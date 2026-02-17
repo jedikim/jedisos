@@ -6,7 +6,10 @@ version: 1.0.0
 created: 2026-02-18
 """
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 from jedisos.marketplace.models import (
     ALLOWED_LICENSES,
@@ -14,6 +17,7 @@ from jedisos.marketplace.models import (
     PackageMeta,
     PackageType,
 )
+from jedisos.marketplace.scanner import PackageScanner
 
 
 class TestPackageType:  # [JS-T014.1]
@@ -97,3 +101,82 @@ class TestAllowedLicenses:  # [JS-T014.4]
 
     def test_contains_bsd(self):
         assert "BSD-3-Clause" in ALLOWED_LICENSES
+
+
+def _create_package(base: Path, pkg_type: str, name: str, meta_override: dict | None = None) -> Path:
+    """테스트용 패키지 디렉토리 생성 헬퍼."""
+    type_dir_map = {
+        "skill": "skills",
+        "prompt_pack": "prompts",
+        "workflow": "workflows",
+        "identity_pack": "identities",
+        "mcp_server": "mcp-servers",
+        "bundle": "bundles",
+    }
+    pkg_dir = base / type_dir_map[pkg_type] / name
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+
+    meta = {
+        "name": name,
+        "version": "1.0.0",
+        "description": f"{name} 패키지",
+        "type": pkg_type,
+        "license": "MIT",
+        **(meta_override or {}),
+    }
+    (pkg_dir / "jedisos-package.yaml").write_text(
+        yaml.dump(meta, allow_unicode=True)
+    )
+    return pkg_dir
+
+
+class TestPackageScanner:  # [JS-T014.5]
+    """PackageScanner 테스트."""
+
+    def test_scan_empty(self, tmp_path):
+        scanner = PackageScanner(tmp_path)
+        result = scanner.scan_all()
+        assert result == []
+
+    def test_scan_one_skill(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        scanner = PackageScanner(tmp_path)
+        result = scanner.scan_all()
+        assert len(result) == 1
+        assert result[0].meta.name == "weather"
+
+    def test_scan_multiple_types(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        _create_package(tmp_path, "prompt_pack", "coding")
+        _create_package(tmp_path, "workflow", "daily")
+        scanner = PackageScanner(tmp_path)
+        result = scanner.scan_all()
+        assert len(result) == 3
+
+    def test_scan_type_filter(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        _create_package(tmp_path, "skill", "calculator")
+        _create_package(tmp_path, "prompt_pack", "coding")
+        scanner = PackageScanner(tmp_path)
+        result = scanner.scan_type(PackageType.SKILL)
+        assert len(result) == 2
+
+    def test_scan_ignores_invalid_yaml(self, tmp_path):
+        pkg_dir = tmp_path / "skills" / "broken"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "jedisos-package.yaml").write_text("{{invalid: yaml: [")
+        scanner = PackageScanner(tmp_path)
+        result = scanner.scan_all()
+        assert len(result) == 0
+
+    def test_scan_ignores_dir_without_yaml(self, tmp_path):
+        (tmp_path / "skills" / "empty").mkdir(parents=True)
+        scanner = PackageScanner(tmp_path)
+        result = scanner.scan_all()
+        assert len(result) == 0
+
+    def test_scan_includes_directory(self, tmp_path):
+        _create_package(tmp_path, "skill", "weather")
+        scanner = PackageScanner(tmp_path)
+        result = scanner.scan_all()
+        assert result[0].directory == tmp_path / "skills" / "weather"
