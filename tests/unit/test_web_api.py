@@ -6,6 +6,7 @@ version: 1.0.0
 created: 2026-02-18
 """
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -120,6 +121,34 @@ class TestSettingsAPI:  # [JS-T011.3]
             resp = client.put("/api/settings/env", json={"key": "DEBUG", "value": "true"})
             assert resp.status_code == 200
             assert "DEBUG=true" in env_file.read_text()
+
+    def test_get_env_keys_includes_channel_tokens(self, client, tmp_path):  # [JS-T011.3a]
+        """known_keys에 채널 토큰이 포함되어야 합니다."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("")
+        with patch("jedisos.web.api.settings._ENV_PATH", env_file):
+            resp = client.get("/api/settings/env")
+            data = resp.json()
+            for key in [
+                "TELEGRAM_BOT_TOKEN",
+                "DISCORD_BOT_TOKEN",
+                "SLACK_BOT_TOKEN",
+                "SLACK_APP_TOKEN",
+            ]:
+                assert key in data["known_keys"]
+
+    def test_update_env_channel_token(self, client, tmp_path):  # [JS-T011.3b]
+        """채널 토큰 업데이트가 허용되어야 합니다."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("DEBUG=false\n")
+        with patch("jedisos.web.api.settings._ENV_PATH", env_file):
+            resp = client.put(
+                "/api/settings/env",
+                json={"key": "TELEGRAM_BOT_TOKEN", "value": "123456:ABC-DEF"},
+            )
+            assert resp.status_code == 200
+            content = env_file.read_text()
+            assert "TELEGRAM_BOT_TOKEN=123456:ABC-DEF" in content
 
     def test_update_env_blocked(self, client):
         resp = client.put("/api/settings/env", json={"key": "DANGEROUS_KEY", "value": "bad"})
@@ -311,9 +340,72 @@ class TestSetupWizardAPI:  # [JS-T011.6]
                 )
                 assert resp.status_code == 200
 
+    def test_complete_setup_with_channel_tokens(self, client, tmp_path):  # [JS-T011.6a]
+        """Setup 완료 시 채널 토큰이 .env에 저장되어야 합니다."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("JEDISOS_FIRST_RUN=true\n")
+        config_dir = tmp_path / "config"
+
+        with (
+            patch("jedisos.web.setup_wizard._ENV_PATH", env_file),
+            patch(
+                "jedisos.web.setup_wizard.Path",
+                side_effect=lambda p: config_dir if p == "config" else Path(p),
+            ),
+        ):
+            resp = client.post(
+                "/api/setup/complete",
+                json={
+                    "openai_api_key": "sk-test",
+                    "google_api_key": "",
+                    "telegram_bot_token": "123456:ABC-DEF",
+                    "discord_bot_token": "discord-token",
+                    "slack_bot_token": "xoxb-slack",
+                    "slack_app_token": "xapp-slack",
+                    "models": ["gpt-5.2"],
+                },
+            )
+            assert resp.status_code == 200
+            content = env_file.read_text()
+            assert "TELEGRAM_BOT_TOKEN=123456:ABC-DEF" in content
+            assert "DISCORD_BOT_TOKEN=discord-token" in content
+            assert "SLACK_BOT_TOKEN=xoxb-slack" in content
+            assert "SLACK_APP_TOKEN=xapp-slack" in content
+
     def test_recommended_mcp(self, client):
         resp = client.get("/api/setup/recommended-mcp")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["servers"]) >= 1
         assert data["servers"][0]["name"] == "hindsight-memory"
+
+
+class TestWebUI:  # [JS-T011.7]
+    """웹 UI 서빙 테스트."""
+
+    def test_root_returns_html(self, client):  # [JS-T011.7a]
+        """GET / 은 HTML을 반환해야 합니다."""
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert "JediSOS" in resp.text
+
+    def test_root_contains_alpine_js(self, client):  # [JS-T011.7b]
+        """Alpine.js CDN이 포함되어야 합니다."""
+        resp = client.get("/")
+        assert "alpinejs" in resp.text
+
+    def test_root_contains_tailwind(self, client):  # [JS-T011.7c]
+        """Tailwind CSS CDN이 포함되어야 합니다."""
+        resp = client.get("/")
+        assert "tailwindcss" in resp.text
+
+    def test_static_js_served(self, client):  # [JS-T011.7d]
+        """정적 JS 파일이 서빙되어야 합니다."""
+        resp = client.get("/static/js/app.js")
+        assert resp.status_code == 200
+
+    def test_static_css_served(self, client):  # [JS-T011.7e]
+        """정적 CSS 파일이 서빙되어야 합니다."""
+        resp = client.get("/static/css/app.css")
+        assert resp.status_code == 200
