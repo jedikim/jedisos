@@ -261,7 +261,6 @@ def update() -> None:
         raise typer.Exit(1) from e
 
 
-
 # === Market 서브커맨드 === [JS-H001.8]
 market_app = typer.Typer(name="market", help="로컬 패키지 매니저", no_args_is_help=True)
 app.add_typer(market_app, name="market")
@@ -276,18 +275,20 @@ def _get_tools_dir() -> Path:
 
 @market_app.command("list")
 def market_list(
-    package_type: Annotated[str | None, typer.Option("--type", "-t", help="패키지 유형 필터")] = None,
+    package_type: Annotated[
+        str | None, typer.Option("--type", "-t", help="패키지 유형 필터")
+    ] = None,
 ) -> None:
     """설치된 패키지 목록을 표시합니다."""
     from jedisos.marketplace.manager import LocalPackageManager
-    from jedisos.marketplace.models import PackageType as PT
+    from jedisos.marketplace.models import PackageType
 
     mgr = LocalPackageManager(_get_tools_dir())
 
     pt = None
     if package_type:
         try:
-            pt = PT(package_type)
+            pt = PackageType(package_type)
         except ValueError:
             err_console.print(f"알 수 없는 유형: {package_type}", style="red")
             raise typer.Exit(1) from None
@@ -350,17 +351,19 @@ def market_info(
         err_console.print(f"패키지를 찾을 수 없습니다: {name}", style="red")
         raise typer.Exit(1)
 
-    console.print(Panel(
-        f"[bold]{pkg.meta.name}[/bold] v{pkg.meta.version}\n\n"
-        f"유형: {pkg.meta.type.value}\n"
-        f"설명: {pkg.meta.description}\n"
-        f"라이선스: {pkg.meta.license}\n"
-        f"작성자: {pkg.meta.author}\n"
-        f"태그: {', '.join(pkg.meta.tags) if pkg.meta.tags else '-'}\n"
-        f"경로: {pkg.directory}",
-        title="패키지 정보",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold]{pkg.meta.name}[/bold] v{pkg.meta.version}\n\n"
+            f"유형: {pkg.meta.type.value}\n"
+            f"설명: {pkg.meta.description}\n"
+            f"라이선스: {pkg.meta.license}\n"
+            f"작성자: {pkg.meta.author}\n"
+            f"태그: {', '.join(pkg.meta.tags) if pkg.meta.tags else '-'}\n"
+            f"경로: {pkg.directory}",
+            title="패키지 정보",
+            border_style="cyan",
+        )
+    )
 
 
 @market_app.command("validate")

@@ -35,7 +35,9 @@ class LocalPackageManager:  # [JS-M001.1]
         self.tools_dir = tools_dir or _Path("tools")
         self.scanner = PackageScanner(self.tools_dir)
 
-    def list_packages(self, package_type: PackageType | None = None) -> list[PackageInfo]:  # [JS-M001.2]
+    def list_packages(
+        self, package_type: PackageType | None = None
+    ) -> list[PackageInfo]:  # [JS-M001.2]
         """설치된 패키지 목록을 반환합니다."""
         if package_type:
             return self.scanner.scan_type(package_type)
@@ -86,7 +88,12 @@ class LocalPackageManager:  # [JS-M001.1]
         shutil.copytree(source_dir, target_dir)
 
         logger.info("package_installed", name=meta.name, version=meta.version, dir=str(target_dir))
-        return {"status": "installed", "name": meta.name, "version": meta.version, "dir": str(target_dir)}
+        return {
+            "status": "installed",
+            "name": meta.name,
+            "version": meta.version,
+            "dir": str(target_dir),
+        }
 
     def remove(self, name: str) -> dict[str, str]:  # [JS-M001.6]
         """패키지를 삭제합니다."""

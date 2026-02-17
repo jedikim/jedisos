@@ -81,13 +81,20 @@ class PackageValidator:  # [JS-M003.3]
 
         passed = all(checks.values())
 
-        logger.info("package_validation_complete", package=package_name, passed=passed, checks=checks)
+        logger.info(
+            "package_validation_complete", package=package_name, passed=passed, checks=checks
+        )
         return ValidationResult(
-            passed=passed, package_name=package_name,
-            checks=checks, errors=errors, warnings=warnings,
+            passed=passed,
+            package_name=package_name,
+            checks=checks,
+            errors=errors,
+            warnings=warnings,
         )
 
-    def _check_metadata(self, package_dir: Path) -> tuple[PackageMeta | None, bool, list[str]]:  # [JS-M003.5]
+    def _check_metadata(
+        self, package_dir: Path
+    ) -> tuple[PackageMeta | None, bool, list[str]]:  # [JS-M003.5]
         """메타데이터 파일을 검증합니다."""
         meta_path = package_dir / "jedisos-package.yaml"
         if not meta_path.exists():

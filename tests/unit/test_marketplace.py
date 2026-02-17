@@ -10,16 +10,20 @@ from pathlib import Path
 
 import pytest
 import yaml
+from typer.testing import CliRunner
 
+from jedisos.cli.main import app
+from jedisos.marketplace.manager import LocalPackageManager
 from jedisos.marketplace.models import (
     ALLOWED_LICENSES,
     PackageInfo,
     PackageMeta,
     PackageType,
 )
-from jedisos.marketplace.manager import LocalPackageManager
 from jedisos.marketplace.scanner import PackageScanner
 from jedisos.marketplace.validator import PackageValidator, ValidationResult
+
+runner = CliRunner()
 
 
 class TestPackageType:  # [JS-T014.1]
@@ -105,7 +109,9 @@ class TestAllowedLicenses:  # [JS-T014.4]
         assert "BSD-3-Clause" in ALLOWED_LICENSES
 
 
-def _create_package(base: Path, pkg_type: str, name: str, meta_override: dict | None = None) -> Path:
+def _create_package(
+    base: Path, pkg_type: str, name: str, meta_override: dict | None = None
+) -> Path:
     """테스트용 패키지 디렉토리 생성 헬퍼."""
     type_dir_map = {
         "skill": "skills",
@@ -126,9 +132,7 @@ def _create_package(base: Path, pkg_type: str, name: str, meta_override: dict | 
         "license": "MIT",
         **(meta_override or {}),
     }
-    (pkg_dir / "jedisos-package.yaml").write_text(
-        yaml.dump(meta, allow_unicode=True)
-    )
+    (pkg_dir / "jedisos-package.yaml").write_text(yaml.dump(meta, allow_unicode=True))
     return pkg_dir
 
 
@@ -191,9 +195,9 @@ class TestPackageValidator:  # [JS-T014.6]
     async def test_valid_skill(self, tmp_path):
         pkg = _create_package(tmp_path, "skill", "weather")
         (pkg / "tool.py").write_text(
-            'from jedisos.forge.decorator import tool\n\n'
+            "from jedisos.forge.decorator import tool\n\n"
             '@tool(name="weather", description="날씨")\n'
-            'async def get_weather(city: str) -> str:\n'
+            "async def get_weather(city: str) -> str:\n"
             '    return f"{city} 맑음"\n'
         )
         (pkg / "README.md").write_text("# Weather Tool\n\n" + "날씨 도구입니다. " * 20)
@@ -306,13 +310,19 @@ class TestLocalPackageManager:  # [JS-T014.7]
     def test_install_from_local(self, tmp_path):
         source = tmp_path / "source" / "my-tool"
         source.mkdir(parents=True)
-        meta = {"name": "my-tool", "version": "1.0.0", "description": "내 도구", "type": "skill", "license": "MIT"}
+        meta = {
+            "name": "my-tool",
+            "version": "1.0.0",
+            "description": "내 도구",
+            "type": "skill",
+            "license": "MIT",
+        }
         (source / "jedisos-package.yaml").write_text(yaml.dump(meta, allow_unicode=True))
         (source / "tool.py").write_text(
-            'from jedisos.forge.decorator import tool\n\n'
+            "from jedisos.forge.decorator import tool\n\n"
             '@tool(name="my-tool", description="내 도구")\n'
-            'async def run(x: str) -> str:\n'
-            '    return x\n'
+            "async def run(x: str) -> str:\n"
+            "    return x\n"
         )
 
         tools_dir = tmp_path / "tools"
@@ -325,7 +335,13 @@ class TestLocalPackageManager:  # [JS-T014.7]
         _create_package(tmp_path, "skill", "weather")
         source = tmp_path / "source" / "weather"
         source.mkdir(parents=True)
-        meta = {"name": "weather", "version": "2.0.0", "description": "날씨 v2", "type": "skill", "license": "MIT"}
+        meta = {
+            "name": "weather",
+            "version": "2.0.0",
+            "description": "날씨 v2",
+            "type": "skill",
+            "license": "MIT",
+        }
         (source / "jedisos-package.yaml").write_text(yaml.dump(meta, allow_unicode=True))
 
         mgr = LocalPackageManager(tmp_path)
@@ -336,7 +352,13 @@ class TestLocalPackageManager:  # [JS-T014.7]
         _create_package(tmp_path, "skill", "weather")
         source = tmp_path / "source" / "weather"
         source.mkdir(parents=True)
-        meta = {"name": "weather", "version": "2.0.0", "description": "날씨 v2", "type": "skill", "license": "MIT"}
+        meta = {
+            "name": "weather",
+            "version": "2.0.0",
+            "description": "날씨 v2",
+            "type": "skill",
+            "license": "MIT",
+        }
         (source / "jedisos-package.yaml").write_text(yaml.dump(meta, allow_unicode=True))
 
         mgr = LocalPackageManager(tmp_path)
@@ -356,13 +378,6 @@ class TestLocalPackageManager:  # [JS-T014.7]
         mgr = LocalPackageManager(tmp_path)
         with pytest.raises(Exception, match="찾을 수 없"):
             mgr.remove("nonexistent")
-
-
-from typer.testing import CliRunner
-
-from jedisos.cli.main import app
-
-runner = CliRunner()
 
 
 class TestMarketCLI:  # [JS-T014.8]

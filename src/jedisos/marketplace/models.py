@@ -10,8 +10,8 @@ dependencies: pydantic>=2.12
 
 from __future__ import annotations
 
-from enum import Enum
-from pathlib import Path
+from enum import StrEnum
+from pathlib import Path  # noqa: TC003 - Pydantic needs Path at runtime
 
 from pydantic import BaseModel, Field
 
@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 ALLOWED_LICENSES: set[str] = {"MIT", "Apache-2.0", "BSD-3-Clause"}
 
 
-class PackageType(str, Enum):  # [JS-M004.2]
+class PackageType(StrEnum):  # [JS-M004.2]
     """패키지 유형 (6종)."""
 
     SKILL = "skill"
