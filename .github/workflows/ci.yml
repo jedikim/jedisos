@@ -28,7 +28,7 @@ jobs:
         run: |
           uv venv .venv
           source .venv/bin/activate
-          uv pip install -e ".[dev]"
+          uv pip install -e ".[dev,channels]"
 
       - name: Lint
         run: |
