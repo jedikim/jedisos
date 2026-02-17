@@ -71,7 +71,7 @@ docker compose up -d --build
 # 5. Wait for health check
 echo "[..] Waiting for JediSOS to start..."
 for i in $(seq 1 30); do
-    if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+    if curl -s http://localhost:8866/health > /dev/null 2>&1; then
         break
     fi
     sleep 2
@@ -82,7 +82,7 @@ echo ""
 echo "  ╔══════════════════════════════════╗"
 echo "  ║  JediSOS is ready!               ║"
 echo "  ║                                  ║"
-echo "  ║  Open http://localhost:8080       ║"
+echo "  ║  Open http://localhost:8866       ║"
 echo "  ╚══════════════════════════════════╝"
 echo ""
 echo "  Stop:   cd $JEDISOS_HOME && docker compose down"
@@ -92,7 +92,7 @@ echo ""
 
 # 7. Open browser
 if command -v open &> /dev/null; then
-    open "http://localhost:8080"
+    open "http://localhost:8866"
 elif command -v xdg-open &> /dev/null; then
-    xdg-open "http://localhost:8080"
+    xdg-open "http://localhost:8866"
 fi

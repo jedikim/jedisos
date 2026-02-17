@@ -123,7 +123,7 @@ def create_app() -> FastAPI:  # [JS-W001.3]
     return app
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8080) -> None:  # [JS-W001.5]  # nosec B104
+def run_server(host: str = "0.0.0.0", port: int = 8866) -> None:  # [JS-W001.5]  # nosec B104
     """uvicorn으로 서버를 실행합니다."""
     import uvicorn
 

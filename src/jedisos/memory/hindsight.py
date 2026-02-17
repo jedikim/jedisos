@@ -13,13 +13,17 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-import nest_asyncio
 import structlog
 
 from jedisos.core.config import HindsightConfig
 from jedisos.core.exceptions import HindsightMemoryError
 
-nest_asyncio.apply()
+try:
+    import nest_asyncio
+
+    nest_asyncio.apply()
+except (ValueError, RuntimeError):
+    pass  # uvloop 등 호환되지 않는 이벤트 루프에서는 건너뜀
 logger = structlog.get_logger()
 
 

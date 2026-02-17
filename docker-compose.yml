@@ -55,7 +55,7 @@ services:
       - path: .env
         required: false
     ports:
-      - "${JEDISOS_PORT:-8080}:8080"
+      - "${JEDISOS_PORT:-8866}:8866"
     volumes:
       - ./config:/config:ro
       - jedisos_data:/data

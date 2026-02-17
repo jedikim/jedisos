@@ -202,7 +202,7 @@ timeout: 60
 @app.command()  # [JS-H001.6]
 def serve(
     host: Annotated[str, typer.Option("--host", "-h", help="바인딩 호스트")] = "0.0.0.0",  # nosec B104
-    port: Annotated[int, typer.Option("--port", "-p", help="포트")] = 8080,
+    port: Annotated[int, typer.Option("--port", "-p", help="포트")] = 8866,
 ) -> None:
     """JediSOS 웹 서버를 실행합니다. (API + Web UI)"""
     console.print(
