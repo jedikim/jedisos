@@ -56,9 +56,10 @@ class HindsightMemory:  # [JS-B001.1]
             Hindsight API 응답
         """
         bid = bank_id or self.config.bank_id
-        payload: dict[str, Any] = {"content": content}
+        item: dict[str, Any] = {"content": content}
         if context:
-            payload["context"] = context
+            item["context"] = context
+        payload: dict[str, Any] = {"items": [item]}
 
         try:
             resp = await self._client.post(
@@ -78,7 +79,7 @@ class HindsightMemory:  # [JS-B001.1]
         query: str,
         bank_id: str | None = None,
     ) -> dict[str, Any]:
-        """쿼리로 관련 메모리 검색 (Recall via Reflect endpoint).
+        """쿼리로 관련 메모리 검색 (Recall).
 
         Args:
             query: 검색 쿼리
@@ -90,7 +91,7 @@ class HindsightMemory:  # [JS-B001.1]
         bid = bank_id or self.config.bank_id
         try:
             resp = await self._client.post(
-                f"/v1/default/banks/{bid}/reflect",
+                f"/v1/default/banks/{bid}/memories/recall",
                 json={"query": query},
             )
             resp.raise_for_status()
