@@ -18,6 +18,7 @@ from jedisos.marketplace.models import (
     PackageType,
 )
 from jedisos.marketplace.scanner import PackageScanner
+from jedisos.marketplace.validator import PackageValidator, ValidationResult
 
 
 class TestPackageType:  # [JS-T014.1]
@@ -180,3 +181,67 @@ class TestPackageScanner:  # [JS-T014.5]
         scanner = PackageScanner(tmp_path)
         result = scanner.scan_all()
         assert result[0].directory == tmp_path / "skills" / "weather"
+
+
+class TestPackageValidator:  # [JS-T014.6]
+    """PackageValidator 테스트."""
+
+    @pytest.mark.asyncio
+    async def test_valid_skill(self, tmp_path):
+        pkg = _create_package(tmp_path, "skill", "weather")
+        (pkg / "tool.py").write_text(
+            'from jedisos.forge.decorator import tool\n\n'
+            '@tool(name="weather", description="날씨")\n'
+            'async def get_weather(city: str) -> str:\n'
+            '    return f"{city} 맑음"\n'
+        )
+        (pkg / "README.md").write_text("# Weather Tool\n\n" + "날씨 도구입니다. " * 20)
+        validator = PackageValidator()
+        result = await validator.validate(pkg)
+        assert result.passed is True
+
+    @pytest.mark.asyncio
+    async def test_missing_metadata(self, tmp_path):
+        pkg_dir = tmp_path / "empty_pkg"
+        pkg_dir.mkdir()
+        validator = PackageValidator()
+        result = await validator.validate(pkg_dir)
+        assert result.passed is False
+        assert any("jedisos-package.yaml" in e for e in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_invalid_license(self, tmp_path):
+        pkg = _create_package(tmp_path, "skill", "bad-license", {"license": "GPL-3.0"})
+        validator = PackageValidator()
+        result = await validator.validate(pkg)
+        assert result.passed is False
+        assert any("라이선스" in e for e in result.errors)
+
+    @pytest.mark.asyncio
+    async def test_prompt_pack_no_code_check(self, tmp_path):
+        """Prompt Pack은 코드 보안 검사를 건너뛰어야 합니다."""
+        pkg = _create_package(tmp_path, "prompt_pack", "coding")
+        (pkg / "prompts.yaml").write_text("prompts:\n  - name: test\n")
+        (pkg / "README.md").write_text("# Coding Prompts\n\n" + "코딩 프롬프트 팩입니다. " * 20)
+        validator = PackageValidator()
+        result = await validator.validate(pkg)
+        assert result.passed is True
+        assert result.checks.get("security") is True
+
+    @pytest.mark.asyncio
+    async def test_short_readme_warning(self, tmp_path):
+        pkg = _create_package(tmp_path, "skill", "short-readme")
+        (pkg / "README.md").write_text("짧음")
+        validator = PackageValidator()
+        result = await validator.validate(pkg)
+        assert len(result.warnings) > 0
+
+    @pytest.mark.asyncio
+    async def test_validation_result_fields(self, tmp_path):
+        pkg = _create_package(tmp_path, "skill", "test-fields")
+        validator = PackageValidator()
+        result = await validator.validate(pkg)
+        assert isinstance(result, ValidationResult)
+        assert isinstance(result.checks, dict)
+        assert isinstance(result.errors, list)
+        assert isinstance(result.warnings, list)
