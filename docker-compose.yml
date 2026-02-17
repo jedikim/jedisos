@@ -39,6 +39,9 @@ services:
 
   # JediSOS 메인 앱 (API + Web UI)
   jedisos:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     image: ghcr.io/jedikim/jedisos:${JEDISOS_VERSION:-latest}
     restart: unless-stopped
     depends_on:
