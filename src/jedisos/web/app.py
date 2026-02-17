@@ -109,9 +109,7 @@ def create_app() -> FastAPI:  # [JS-W001.3]
     @app.get("/", response_class=HTMLResponse)
     async def serve_index(request: Request) -> HTMLResponse:  # [JS-W001.6]
         """메인 웹 UI를 렌더링합니다."""
-        return _templates.TemplateResponse(
-            "index.html", {"request": request, "version": __version__}
-        )
+        return _templates.TemplateResponse(request, "index.html", {"version": __version__})
 
     @app.get("/health")
     async def health_check() -> JSONResponse:  # [JS-W001.4]
