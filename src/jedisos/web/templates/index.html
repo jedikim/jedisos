@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<!--
+[JS-W012] jedisos.web.templates.index
+JediSOS 메인 웹 UI SPA 템플릿 (Jinja2 + Alpine.js + Tailwind CSS)
+
+version: 1.0.0
+created: 2026-02-18
+modified: 2026-02-18
+-->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JediSOS - AI 비서 시스템</title>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    },
+                },
+            },
+        }
+    </script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/app.css">
+
+    <!-- Alpine.js -->
+    <script src="/static/js/app.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-900 min-h-screen flex flex-col" x-data="app()">
+
+    <!-- 로딩 스피너 -->
+    <div x-show="loading" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-white">
+        <div class="text-center">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <p class="text-gray-500 text-sm">JediSOS 로딩 중...</p>
+        </div>
+    </div>
+
+    <!-- 토스트 알림 -->
+    <div x-show="toast.show" x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 translate-y-2"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-2"
+         class="fixed top-4 right-4 z-50 max-w-sm"
+         :class="toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'"
+         class="rounded-lg border px-4 py-3 shadow-lg">
+        <div class="flex items-center gap-2">
+            <template x-if="toast.type === 'success'">
+                <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                </svg>
+            </template>
+            <template x-if="toast.type === 'error'">
+                <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                </svg>
+            </template>
+            <span x-text="toast.message" class="text-sm font-medium"></span>
+        </div>
+    </div>
+
+    <!-- 네비게이션 바 (Setup Wizard가 아닐 때만 표시) -->
+    <nav x-show="currentPage !== 'setup'" class="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- 로고 -->
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+                        <span class="text-white font-bold text-sm">J</span>
+                    </div>
+                    <span class="text-lg font-bold text-gray-900">JediSOS</span>
+                </div>
+
+                <!-- 탭 -->
+                <div class="hidden sm:flex items-center gap-1">
+                    <button @click="navigateTo('chat')"
+                            :class="currentPage === 'chat' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        <span class="flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                            채팅
+                        </span>
+                    </button>
+                    <button @click="navigateTo('settings')"
+                            :class="currentPage === 'settings' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        <span class="flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            설정
+                        </span>
+                    </button>
+                    <button @click="navigateTo('packages')"
+                            :class="currentPage === 'packages' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        <span class="flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                            </svg>
+                            패키지
+                        </span>
+                    </button>
+                    <button @click="navigateTo('monitoring')"
+                            :class="currentPage === 'monitoring' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'"
+                            class="px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        <span class="flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                            </svg>
+                            모니터링
+                        </span>
+                    </button>
+                </div>
+
+                <!-- WebSocket 상태 (채팅 페이지일 때) -->
+                <div class="flex items-center gap-3">
+                    <div x-show="currentPage === 'chat'" class="flex items-center gap-2">
+                        <span class="ws-status" :class="chat.connected ? 'ws-connected' : 'ws-disconnected'"></span>
+                        <span class="text-xs text-gray-500" x-text="chat.connected ? '연결됨' : '연결 끊김'"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 모바일 탭 -->
+            <div class="sm:hidden flex items-center gap-1 pb-2 overflow-x-auto">
+                <button @click="navigateTo('chat')"
+                        :class="currentPage === 'chat' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600'"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap">채팅</button>
+                <button @click="navigateTo('settings')"
+                        :class="currentPage === 'settings' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600'"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap">설정</button>
+                <button @click="navigateTo('packages')"
+                        :class="currentPage === 'packages' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600'"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap">패키지</button>
+                <button @click="navigateTo('monitoring')"
+                        :class="currentPage === 'monitoring' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600'"
+                        class="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap">모니터링</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 메인 콘텐츠 -->
+    <main class="flex-1">
+
+        <!-- ========================================== -->
+        <!-- 페이지 1: Setup Wizard                      -->
+        <!-- ========================================== -->
+        <section x-show="currentPage === 'setup'" x-transition class="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-blue-50 p-4">
+            <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-8">
+                <!-- 헤더 -->
+                <div class="text-center mb-8">
+                    <div class="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <span class="text-white font-bold text-2xl">J</span>
+                    </div>
+                    <h1 class="text-2xl font-bold text-gray-900">JediSOS 설정</h1>
+                    <p class="text-gray-500 mt-2">AI 비서 시스템을 설정합니다</p>
+                </div>
+
+                <!-- 스텝 인디케이터 -->
+                <div class="flex items-center justify-center gap-2 mb-8">
+                    <template x-for="s in 3" :key="s">
+                        <div class="flex items-center">
+                            <div :class="setup.step >= s ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'"
+                                 class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors">
+                                <span x-text="s"></span>
+                            </div>
+                            <div x-show="s < 3" :class="setup.step > s ? 'bg-indigo-600' : 'bg-gray-200'"
+                                 class="w-12 h-0.5 transition-colors"></div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- 스텝 1: API 키 설정 -->
+                <div x-show="setup.step === 1" x-transition>
+                    <h2 class="text-lg font-semibold text-gray-900 mb-1">API 키 설정</h2>
+                    <p class="text-sm text-gray-500 mb-6">LLM 서비스에 접속하기 위한 API 키를 입력합니다</p>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">OpenAI API Key</label>
+                            <input type="password" x-model="setup.openaiKey"
+                                   placeholder="sk-..."
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Google API Key</label>
+                            <input type="password" x-model="setup.googleKey"
+                                   placeholder="AIza..."
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex justify-end">
+                        <button @click="setup.step = 2"
+                                class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+                            다음
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 스텝 2: 채널 설정 -->
+                <div x-show="setup.step === 2" x-transition>
+                    <h2 class="text-lg font-semibold text-gray-900 mb-1">채널 설정</h2>
+                    <p class="text-sm text-gray-500 mb-6">메신저 봇 토큰을 입력합니다 (선택사항)</p>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Telegram Bot Token</label>
+                            <input type="password" x-model="setup.telegramToken"
+                                   placeholder="123456:ABC-DEF..."
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Discord Bot Token</label>
+                            <input type="password" x-model="setup.discordToken"
+                                   placeholder="MTIz..."
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Slack Bot Token</label>
+                            <input type="password" x-model="setup.slackBotToken"
+                                   placeholder="xoxb-..."
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Slack App Token</label>
+                            <input type="password" x-model="setup.slackAppToken"
+                                   placeholder="xapp-..."
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex justify-between">
+                        <button @click="setup.step = 1"
+                                class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+                            이전
+                        </button>
+                        <button @click="setup.step = 3"
+                                class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+                            다음
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 스텝 3: 모델 설정 -->
+                <div x-show="setup.step === 3" x-transition>
+                    <h2 class="text-lg font-semibold text-gray-900 mb-1">모델 설정</h2>
+                    <p class="text-sm text-gray-500 mb-6">사용할 LLM 모델을 설정합니다 (쉼표로 구분)</p>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">모델 목록</label>
+                            <input type="text" x-model="setup.models"
+                                   placeholder="gpt-5.2, gemini/gemini-3-flash"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                            <p class="text-xs text-gray-400 mt-1">예: gpt-5.2, gemini/gemini-3-flash, claude-sonnet-5-20260203</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 flex justify-between">
+                        <button @click="setup.step = 2"
+                                class="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+                            이전
+                        </button>
+                        <button @click="completeSetup()" :disabled="setup.saving"
+                                class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                            <svg x-show="setup.saving" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            <span x-text="setup.saving ? '저장 중...' : '설정 완료'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 페이지 2: 채팅                              -->
+        <!-- ========================================== -->
+        <section x-show="currentPage === 'chat'" x-transition class="h-[calc(100vh-4rem)] flex flex-col max-w-4xl mx-auto w-full">
+            <!-- 채팅 메시지 영역 -->
+            <div x-ref="chatMessages" class="flex-1 overflow-y-auto chat-scroll px-4 py-6 space-y-4">
+                <!-- 빈 상태 -->
+                <div x-show="chat.messages.length === 0" class="flex items-center justify-center h-full">
+                    <div class="text-center">
+                        <div class="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold text-gray-900">JediSOS 채팅</h3>
+                        <p class="text-gray-500 text-sm mt-1">AI 비서에게 메시지를 보내세요</p>
+                    </div>
+                </div>
+
+                <!-- 메시지 목록 -->
+                <template x-for="(msg, idx) in chat.messages" :key="idx">
+                    <div :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+                        <div :class="msg.role === 'user' ? 'chat-message-user' : 'chat-message-assistant'"
+                             class="max-w-[80%] sm:max-w-[70%]">
+                            <div class="text-xs font-medium mb-1 opacity-70"
+                                 x-text="msg.role === 'user' ? '나' : 'JediSOS'"></div>
+                            <div class="text-sm leading-relaxed whitespace-pre-wrap" x-text="msg.content"></div>
+                            <div class="text-xs opacity-50 mt-1 text-right" x-text="msg.time"></div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- 타이핑 인디케이터 -->
+                <div x-show="chat.sending" class="flex justify-start">
+                    <div class="chat-message-assistant max-w-[80%]">
+                        <div class="flex items-center gap-1.5">
+                            <div class="typing-dot"></div>
+                            <div class="typing-dot" style="animation-delay: 0.2s"></div>
+                            <div class="typing-dot" style="animation-delay: 0.4s"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 입력 영역 -->
+            <div class="border-t border-gray-200 bg-white px-4 py-4">
+                <div class="flex items-end gap-3 max-w-4xl mx-auto">
+                    <div class="flex-1 relative">
+                        <textarea x-model="chat.input"
+                                  @keydown.enter.prevent="if (!$event.shiftKey) sendMessage()"
+                                  placeholder="메시지를 입력하세요... (Shift+Enter로 줄바꿈)"
+                                  rows="1"
+                                  class="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm resize-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                                  style="max-height: 120px"
+                                  @input="$el.style.height = 'auto'; $el.style.height = Math.min($el.scrollHeight, 120) + 'px'"></textarea>
+                    </div>
+                    <button @click="sendMessage()"
+                            :disabled="!chat.input.trim() || chat.sending || !chat.connected"
+                            class="px-4 py-3 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 페이지 3: 설정                              -->
+        <!-- ========================================== -->
+        <section x-show="currentPage === 'settings'" x-transition class="max-w-4xl mx-auto w-full px-4 py-6">
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">설정</h1>
+
+            <!-- 서브 탭 -->
+            <div class="flex items-center gap-1 border-b border-gray-200 mb-6 overflow-x-auto">
+                <button @click="settingsTab = 'apiKeys'"
+                        :class="settingsTab === 'apiKeys' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+                    API 키
+                </button>
+                <button @click="settingsTab = 'channels'"
+                        :class="settingsTab === 'channels' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+                    채널 토큰
+                </button>
+                <button @click="settingsTab = 'llm'"
+                        :class="settingsTab === 'llm' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+                    LLM 설정
+                </button>
+                <button @click="settingsTab = 'security'"
+                        :class="settingsTab === 'security' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors">
+                    보안
+                </button>
+            </div>
+
+            <!-- API 키 탭 -->
+            <div x-show="settingsTab === 'apiKeys'" x-transition>
+                <div class="bg-white rounded-xl border border-gray-200 divide-y divide-gray-200">
+                    <template x-for="envVar in settings.env.filter(e => ['OPENAI_API_KEY', 'GOOGLE_API_KEY'].includes(e.key))" :key="envVar.key">
+                        <div class="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div class="sm:w-48 flex-shrink-0">
+                                <span class="text-sm font-medium text-gray-900" x-text="envVar.key"></span>
+                                <span x-show="envVar.configured"
+                                      class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">설정됨</span>
+                                <span x-show="!envVar.configured"
+                                      class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">미설정</span>
+                            </div>
+                            <div class="flex-1 flex items-center gap-2">
+                                <input type="password" :x-model="'envValues.' + envVar.key"
+                                       x-model="envValues[envVar.key]"
+                                       :placeholder="envVar.configured ? '********' : '값을 입력하세요'"
+                                       class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                                <button @click="saveEnvVar(envVar.key, envValues[envVar.key])"
+                                        class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors whitespace-nowrap">
+                                    저장
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="settings.env.filter(e => ['OPENAI_API_KEY', 'GOOGLE_API_KEY'].includes(e.key)).length === 0" class="p-8 text-center text-gray-500 text-sm">
+                        API 키 정보를 불러오는 중...
+                    </div>
+                </div>
+            </div>
+
+            <!-- 채널 토큰 탭 -->
+            <div x-show="settingsTab === 'channels'" x-transition>
+                <div class="bg-white rounded-xl border border-gray-200 divide-y divide-gray-200">
+                    <template x-for="envVar in settings.env.filter(e => ['TELEGRAM_BOT_TOKEN', 'DISCORD_BOT_TOKEN', 'SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN'].includes(e.key))" :key="envVar.key">
+                        <div class="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div class="sm:w-48 flex-shrink-0">
+                                <span class="text-sm font-medium text-gray-900" x-text="envVar.key"></span>
+                                <span x-show="envVar.configured"
+                                      class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">설정됨</span>
+                                <span x-show="!envVar.configured"
+                                      class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">미설정</span>
+                            </div>
+                            <div class="flex-1 flex items-center gap-2">
+                                <input type="password" x-model="envValues[envVar.key]"
+                                       :placeholder="envVar.configured ? '********' : '값을 입력하세요'"
+                                       class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                                <button @click="saveEnvVar(envVar.key, envValues[envVar.key])"
+                                        class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors whitespace-nowrap">
+                                    저장
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="settings.env.filter(e => ['TELEGRAM_BOT_TOKEN', 'DISCORD_BOT_TOKEN', 'SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN'].includes(e.key)).length === 0" class="p-8 text-center text-gray-500 text-sm">
+                        채널 토큰 정보를 불러오는 중...
+                    </div>
+                </div>
+            </div>
+
+            <!-- LLM 설정 탭 -->
+            <div x-show="settingsTab === 'llm'" x-transition>
+                <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+                    <!-- 모델 목록 -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-900 mb-2">모델 목록</label>
+                        <div class="space-y-2">
+                            <template x-for="(model, idx) in settings.llm.models" :key="idx">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs text-gray-400 w-6 text-right" x-text="idx + 1 + '.'"></span>
+                                    <input type="text" x-model="settings.llm.models[idx]"
+                                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                                    <button @click="settings.llm.models.splice(idx, 1)"
+                                            class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                        <button @click="settings.llm.models.push('')"
+                                class="mt-2 px-3 py-1.5 border border-dashed border-gray-300 text-gray-500 rounded-lg text-sm hover:border-indigo-400 hover:text-indigo-600 transition-colors">
+                            + 모델 추가
+                        </button>
+                    </div>
+
+                    <!-- Temperature -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-900 mb-2">
+                            Temperature: <span class="text-indigo-600" x-text="settings.llm.temperature"></span>
+                        </label>
+                        <input type="range" x-model.number="settings.llm.temperature"
+                               min="0" max="2" step="0.1"
+                               class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>0 (결정적)</span>
+                            <span>2 (창의적)</span>
+                        </div>
+                    </div>
+
+                    <!-- Max Tokens -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-900 mb-2">최대 토큰</label>
+                        <input type="number" x-model.number="settings.llm.max_tokens"
+                               min="256" max="128000" step="256"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                    </div>
+
+                    <!-- Timeout -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-900 mb-2">타임아웃 (초)</label>
+                        <input type="number" x-model.number="settings.llm.timeout"
+                               min="5" max="300" step="5"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                    </div>
+
+                    <!-- 저장 버튼 -->
+                    <div class="pt-4 border-t border-gray-200">
+                        <button @click="saveLLMSettings()"
+                                class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+                            LLM 설정 저장
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 보안 탭 -->
+            <div x-show="settingsTab === 'security'" x-transition>
+                <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">차단된 도구</h3>
+                        <div x-show="settings.security.blocked_tools && settings.security.blocked_tools.length > 0" class="flex flex-wrap gap-2">
+                            <template x-for="tool in settings.security.blocked_tools" :key="tool">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800" x-text="tool"></span>
+                            </template>
+                        </div>
+                        <p x-show="!settings.security.blocked_tools || settings.security.blocked_tools.length === 0" class="text-sm text-gray-500">차단된 도구 없음</p>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">허용된 도구</h3>
+                        <div x-show="settings.security.allowed_tools && settings.security.allowed_tools.length > 0" class="flex flex-wrap gap-2">
+                            <template x-for="tool in settings.security.allowed_tools" :key="tool">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800" x-text="tool"></span>
+                            </template>
+                        </div>
+                        <p x-show="!settings.security.allowed_tools || settings.security.allowed_tools.length === 0" class="text-sm text-gray-500">모든 도구 허용 (제한 없음)</p>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">분당 최대 요청</h3>
+                        <p class="text-sm text-gray-700" x-text="(settings.security.max_requests_per_minute || '-') + '회/분'"></p>
+                    </div>
+
+                    <p class="text-xs text-gray-400">보안 설정은 읽기 전용입니다. 설정 파일에서 직접 수정하세요.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 페이지 4: 패키지                            -->
+        <!-- ========================================== -->
+        <section x-show="currentPage === 'packages'" x-transition class="max-w-4xl mx-auto w-full px-4 py-6">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold text-gray-900">패키지</h1>
+                <button @click="loadServers(); loadRecommended()"
+                        class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                    <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    새로고침
+                </button>
+            </div>
+
+            <!-- 설치된 서버 -->
+            <div class="bg-white rounded-xl border border-gray-200 mb-6">
+                <div class="p-4 border-b border-gray-200">
+                    <h2 class="text-sm font-semibold text-gray-900">설치된 MCP 서버</h2>
+                </div>
+                <div x-show="packages.servers.length === 0" class="p-8 text-center text-gray-500 text-sm">
+                    설치된 MCP 서버가 없습니다
+                </div>
+                <div class="divide-y divide-gray-200">
+                    <template x-for="server in packages.servers" :key="server.name">
+                        <div class="p-4 flex items-center justify-between">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium text-gray-900" x-text="server.name"></span>
+                                    <span :class="server.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'"
+                                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                                          x-text="server.enabled ? '활성' : '비활성'"></span>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-0.5 truncate" x-text="server.description || server.url"></p>
+                            </div>
+                            <div class="flex items-center gap-2 ml-4">
+                                <button @click="toggleServer(server.name)"
+                                        :class="server.enabled ? 'bg-indigo-600' : 'bg-gray-300'"
+                                        class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                                    <span :class="server.enabled ? 'translate-x-5' : 'translate-x-0'"
+                                          class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out mt-0.5 ml-0.5"></span>
+                                </button>
+                                <button @click="removeServer(server.name)"
+                                        class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- 서버 추가 폼 -->
+            <div class="bg-white rounded-xl border border-gray-200 mb-6">
+                <div class="p-4 border-b border-gray-200">
+                    <h2 class="text-sm font-semibold text-gray-900">새 MCP 서버 추가</h2>
+                </div>
+                <div class="p-4 space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">서버 이름</label>
+                            <input type="text" x-model="packages.newServer.name"
+                                   placeholder="my-mcp-server"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">URL</label>
+                            <input type="text" x-model="packages.newServer.url"
+                                   placeholder="http://localhost:3000/mcp"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">설명</label>
+                        <input type="text" x-model="packages.newServer.description"
+                               placeholder="서버 설명을 입력하세요"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                    </div>
+                    <button @click="installServer()"
+                            :disabled="!packages.newServer.name || !packages.newServer.url"
+                            class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        서버 추가
+                    </button>
+                </div>
+            </div>
+
+            <!-- 추천 서버 -->
+            <div class="bg-white rounded-xl border border-gray-200">
+                <div class="p-4 border-b border-gray-200">
+                    <h2 class="text-sm font-semibold text-gray-900">추천 MCP 서버</h2>
+                </div>
+                <div x-show="packages.recommended.length === 0" class="p-8 text-center text-gray-500 text-sm">
+                    추천 서버 정보를 불러오는 중...
+                </div>
+                <div class="divide-y divide-gray-200">
+                    <template x-for="rec in packages.recommended" :key="rec.name">
+                        <div class="p-4 flex items-center justify-between">
+                            <div class="flex-1 min-w-0">
+                                <span class="text-sm font-medium text-gray-900" x-text="rec.name"></span>
+                                <p class="text-xs text-gray-500 mt-0.5" x-text="rec.description"></p>
+                            </div>
+                            <button @click="packages.newServer.name = rec.name; packages.newServer.url = rec.url; packages.newServer.description = rec.description || ''"
+                                    class="ml-4 px-3 py-1.5 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-medium hover:bg-indigo-50 transition-colors whitespace-nowrap">
+                                설정에 추가
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 페이지 5: 모니터링                          -->
+        <!-- ========================================== -->
+        <section x-show="currentPage === 'monitoring'" x-transition class="max-w-4xl mx-auto w-full px-4 py-6">
+            <div class="flex items-center justify-between mb-6">
+                <h1 class="text-2xl font-bold text-gray-900">모니터링</h1>
+                <button @click="loadMonitoring()"
+                        class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                    <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    새로고침
+                </button>
+            </div>
+
+            <!-- 시스템 상태 -->
+            <div class="bg-white rounded-xl border border-gray-200 mb-6">
+                <div class="p-4 border-b border-gray-200">
+                    <h2 class="text-sm font-semibold text-gray-900">시스템 상태</h2>
+                </div>
+                <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="text-xs text-gray-500 mb-1">버전</div>
+                        <div class="text-sm font-semibold text-gray-900" x-text="monitoring.status.version || '-'"></div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="text-xs text-gray-500 mb-1">Python</div>
+                        <div class="text-sm font-semibold text-gray-900" x-text="monitoring.status.python || '-'"></div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="text-xs text-gray-500 mb-1">Hindsight</div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full" :class="monitoring.status.services?.hindsight?.status === 'connected' ? 'bg-green-500' : 'bg-red-500'"></span>
+                            <span class="text-sm font-semibold text-gray-900" x-text="monitoring.status.services?.hindsight?.status || '-'"></span>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="text-xs text-gray-500 mb-1">LLM 모델</div>
+                        <div class="text-sm font-semibold text-gray-900" x-text="(monitoring.status.models || []).join(', ') || '-'"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 모니터링 서브탭 -->
+            <div class="flex items-center gap-1 border-b border-gray-200 mb-4">
+                <button @click="monitoringTab = 'audit'"
+                        :class="monitoringTab === 'audit' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">
+                    감사 로그
+                </button>
+                <button @click="monitoringTab = 'denied'"
+                        :class="monitoringTab === 'denied' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">
+                    거부된 요청
+                </button>
+                <button @click="monitoringTab = 'policy'"
+                        :class="monitoringTab === 'policy' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors">
+                    보안 정책
+                </button>
+            </div>
+
+            <!-- 감사 로그 -->
+            <div x-show="monitoringTab === 'audit'" x-transition>
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div x-show="monitoring.audit.length === 0" class="p-8 text-center text-gray-500 text-sm">
+                        감사 로그가 없습니다
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table x-show="monitoring.audit.length > 0" class="w-full text-sm">
+                            <thead class="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">시간</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">이벤트</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">도구</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">결과</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <template x-for="(entry, idx) in monitoring.audit" :key="idx">
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap" x-text="entry.timestamp || '-'"></td>
+                                        <td class="px-4 py-3 text-xs text-gray-900" x-text="entry.event || '-'"></td>
+                                        <td class="px-4 py-3 text-xs text-gray-700" x-text="entry.tool || '-'"></td>
+                                        <td class="px-4 py-3">
+                                            <span :class="entry.result === 'allowed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                                  class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                                                  x-text="entry.result || '-'"></span>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 거부된 요청 -->
+            <div x-show="monitoringTab === 'denied'" x-transition>
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div x-show="monitoring.denied.length === 0" class="p-8 text-center text-gray-500 text-sm">
+                        거부된 요청이 없습니다
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table x-show="monitoring.denied.length > 0" class="w-full text-sm">
+                            <thead class="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">시간</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">도구</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">사유</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                <template x-for="(entry, idx) in monitoring.denied" :key="idx">
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap" x-text="entry.timestamp || '-'"></td>
+                                        <td class="px-4 py-3 text-xs text-gray-900" x-text="entry.tool || '-'"></td>
+                                        <td class="px-4 py-3 text-xs text-gray-700" x-text="entry.reason || '-'"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 보안 정책 -->
+            <div x-show="monitoringTab === 'policy'" x-transition>
+                <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">차단된 도구</h3>
+                        <div x-show="monitoring.policy.blocked_tools && monitoring.policy.blocked_tools.length > 0" class="flex flex-wrap gap-2">
+                            <template x-for="tool in monitoring.policy.blocked_tools" :key="tool">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800" x-text="tool"></span>
+                            </template>
+                        </div>
+                        <p x-show="!monitoring.policy.blocked_tools || monitoring.policy.blocked_tools.length === 0" class="text-sm text-gray-500">차단된 도구 없음</p>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">허용된 도구</h3>
+                        <div x-show="monitoring.policy.allowed_tools && monitoring.policy.allowed_tools.length > 0" class="flex flex-wrap gap-2">
+                            <template x-for="tool in monitoring.policy.allowed_tools" :key="tool">
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800" x-text="tool"></span>
+                            </template>
+                        </div>
+                        <p x-show="!monitoring.policy.allowed_tools || monitoring.policy.allowed_tools.length === 0" class="text-sm text-gray-500">모든 도구 허용 (제한 없음)</p>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-900 mb-3">분당 최대 요청</h3>
+                        <p class="text-sm text-gray-700" x-text="(monitoring.policy.max_requests_per_minute || '-') + '회/분'"></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 푸터 -->
+    <footer x-show="currentPage !== 'setup'" class="border-t border-gray-200 bg-white py-3">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-xs text-gray-400">JediSOS v{{ version }} &mdash; AI Agent System with Hindsight Memory</p>
+        </div>
+    </footer>
+
+</body>
+</html>

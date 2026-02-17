@@ -11,12 +11,15 @@ dependencies: fastapi>=0.115, uvicorn>=0.34
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from jedisos import __version__
 
@@ -24,6 +27,12 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 logger = structlog.get_logger()
+
+# 웹 디렉토리 경로
+_WEB_DIR = Path(__file__).parent
+
+# Jinja2 템플릿 엔진
+_templates = Jinja2Templates(directory=str(_WEB_DIR / "templates"))
 
 # 앱 상태 (lifespan에서 초기화)
 _app_state: dict[str, Any] = {}
@@ -97,10 +106,20 @@ def create_app() -> FastAPI:  # [JS-W001.3]
     app.include_router(monitoring_router, prefix="/api/monitoring", tags=["monitoring"])
     app.include_router(wizard_router, prefix="/api/setup", tags=["setup"])
 
+    @app.get("/", response_class=HTMLResponse)
+    async def serve_index(request: Request) -> HTMLResponse:  # [JS-W001.6]
+        """메인 웹 UI를 렌더링합니다."""
+        return _templates.TemplateResponse(
+            "index.html", {"request": request, "version": __version__}
+        )
+
     @app.get("/health")
     async def health_check() -> JSONResponse:  # [JS-W001.4]
         """헬스 체크 엔드포인트."""
         return JSONResponse({"status": "ok", "version": __version__})
+
+    # 정적 파일 서빙 (/api/* 라우터보다 뒤에 마운트하여 API 경로 우선)
+    app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
 
     logger.info("web_app_created")
     return app
