@@ -88,7 +88,7 @@ class TestRecallMemory:  # [JS-T005.3]
     async def test_recall_success(self, react_agent):
         """recall 성공 시 memory_context가 설정되는지 확인."""
         state: AgentState = {
-            "messages": [MagicMock(content="안녕하세요")],
+            "messages": [MagicMock(type="human", content="안녕하세요")],
             "memory_context": "",
             "bank_id": "test-bank",
             "tool_call_count": 0,

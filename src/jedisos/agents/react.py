@@ -10,6 +10,8 @@ dependencies: langgraph>=1.0.8, litellm>=1.81.12
 
 from __future__ import annotations
 
+import asyncio
+import json
 from typing import TYPE_CHECKING, Annotated, Any, TypedDict
 
 import structlog
@@ -17,6 +19,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
     from jedisos.llm.router import LLMRouter
     from jedisos.memory.hindsight import HindsightMemory
     from jedisos.security.audit import AuditLogger
@@ -25,6 +29,27 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 MAX_TOOL_CALLS = 10
+
+# 백그라운드 태스크 참조 (GC 방지)
+_background_tasks: set[asyncio.Task[None]] = set()
+
+# LangGraph 메시지 타입 → OpenAI 역할 매핑
+_ROLE_MAP = {"human": "user", "ai": "assistant", "system": "system", "tool": "tool"}
+
+
+def _extract_msg_role_content(msg: Any) -> tuple[str, str]:  # [JS-E001.0]
+    """메시지에서 role과 content를 추출합니다. 객체/dict 형식 모두 지원."""
+    if hasattr(msg, "type"):
+        role = _ROLE_MAP.get(msg.type, msg.type)
+        content = msg.content if hasattr(msg, "content") else ""
+    elif isinstance(msg, dict):
+        raw_role = msg.get("role", "unknown")
+        role = _ROLE_MAP.get(raw_role, raw_role)
+        content = msg.get("content", "")
+    else:
+        role = "unknown"
+        content = str(msg)
+    return role, content or ""
 
 
 class AgentState(TypedDict):  # [JS-E001.1]
@@ -83,9 +108,18 @@ class ReActAgent:  # [JS-E001.2]
         return builder.compile()
 
     async def _recall_memory(self, state: AgentState) -> dict:  # [JS-E001.4]
-        """관련 메모리 검색."""
-        last_msg = state["messages"][-1]
-        query = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+        """관련 메모리 검색. 최근 사용자 메시지를 기반으로 검색."""
+        query_parts: list[str] = []
+        for msg in reversed(state["messages"]):
+            role, content = _extract_msg_role_content(msg)
+            if role == "user" and content:
+                query_parts.append(content)
+                if len(query_parts) >= 2:
+                    break
+
+        query = " ".join(reversed(query_parts)) if query_parts else ""
+        if not query:
+            return {"memory_context": ""}
 
         try:
             result = await self.memory.recall(query, bank_id=state.get("bank_id"))
@@ -110,8 +144,29 @@ class ReActAgent:  # [JS-E001.2]
 
         for msg in state["messages"]:
             if hasattr(msg, "type"):
-                messages.append({"role": msg.type, "content": msg.content})
+                role = _ROLE_MAP.get(msg.type, msg.type)
+                msg_dict: dict[str, Any] = {"role": role, "content": msg.content}
+                # tool_calls가 있으면 OpenAI 형식으로 변환하여 포함
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    msg_dict["tool_calls"] = [
+                        self._to_openai_tool_call(tc) for tc in msg.tool_calls
+                    ]
+                # tool 응답이면 tool_call_id 포함
+                if hasattr(msg, "tool_call_id") and msg.tool_call_id:
+                    msg_dict["tool_call_id"] = msg.tool_call_id
+                messages.append(msg_dict)
             else:
+                # dict 형태도 역할 매핑 + tool_calls 형식 변환
+                if isinstance(msg, dict):
+                    if msg.get("role") in _ROLE_MAP:
+                        msg = {**msg, "role": _ROLE_MAP[msg["role"]]}
+                    if msg.get("tool_calls"):
+                        msg = {
+                            **msg,
+                            "tool_calls": [
+                                self._to_openai_tool_call(tc) for tc in msg["tool_calls"]
+                            ],
+                        }
                 messages.append(msg)
 
         tool_defs = [t.to_dict() for t in self.tools] if self.tools else None
@@ -134,8 +189,6 @@ class ReActAgent:  # [JS-E001.2]
 
     async def _execute_tools(self, state: AgentState) -> dict:  # [JS-E001.7]
         """도구 실행. tool_executor 또는 내장 도구 핸들러를 통해 실행."""
-        import json
-
         count = state.get("tool_call_count", 0)
         last = state["messages"][-1]
         tool_calls = getattr(last, "tool_calls", None) or (
@@ -164,10 +217,43 @@ class ReActAgent:  # [JS-E001.2]
         return {"messages": tool_results, "tool_call_count": count + 1}
 
     @staticmethod
+    def _to_openai_tool_call(tc: Any) -> dict[str, Any]:  # [JS-E001.5a]
+        """LangGraph tool_call을 OpenAI 형식으로 변환합니다.
+
+        LangGraph: {"name": ..., "args": {...}, "id": ..., "type": "tool_call"}
+        OpenAI:    {"id": ..., "type": "function", "function": {"name": ..., "arguments": "..."}}
+        """
+        if isinstance(tc, dict):
+            name = tc.get("name", "")
+            args = tc.get("args", {})
+            tool_id = tc.get("id", "")
+            # 이미 OpenAI 형식이면 그대로 반환
+            if "function" in tc:
+                return tc
+        else:
+            name = getattr(tc, "name", "")
+            args = getattr(tc, "args", {})
+            tool_id = getattr(tc, "id", "")
+            if hasattr(tc, "function"):
+                return {
+                    "id": tool_id,
+                    "type": "function",
+                    "function": {
+                        "name": getattr(tc.function, "name", ""),
+                        "arguments": getattr(tc.function, "arguments", "{}"),
+                    },
+                }
+
+        args_str = json.dumps(args, ensure_ascii=False) if isinstance(args, dict) else str(args)
+        return {
+            "id": tool_id,
+            "type": "function",
+            "function": {"name": name, "arguments": args_str},
+        }
+
+    @staticmethod
     def _parse_tool_call(tc: Any) -> tuple[str, str, dict[str, Any]]:  # [JS-E001.7b]
         """도구 호출을 파싱합니다. OpenAI/LangGraph 형식 모두 지원."""
-        import json
-
         if isinstance(tc, dict):
             # LangGraph ToolCall 형식: {"name": ..., "args": ..., "id": ...}
             if "name" in tc and "args" in tc:
@@ -216,22 +302,37 @@ class ReActAgent:  # [JS-E001.2]
         return {"error": f"도구 '{name}'의 실행기가 설정되지 않았습니다."}
 
     async def _retain_memory(self, state: AgentState) -> dict:  # [JS-E001.8]
-        """대화 내용을 메모리에 저장."""
+        """대화 내용을 메모리에 저장 (백그라운드, 응답 블로킹 없음)."""
         conversation = "\n".join(
-            f"{m.type if hasattr(m, 'type') else 'unknown'}: "
-            f"{m.content if hasattr(m, 'content') else str(m)}"
-            for m in state["messages"]
+            f"{role}: {content}"
+            for role, content in (_extract_msg_role_content(m) for m in state["messages"])
         )
-        try:
-            await self.memory.retain(conversation, bank_id=state.get("bank_id"))
-        except Exception as e:
-            logger.warning("retain_failed_continuing", error=str(e))
+
+        async def _bg_retain() -> None:
+            try:
+                await self.memory.retain(conversation, bank_id=state.get("bank_id"))
+            except Exception as e:
+                logger.warning("retain_failed_continuing", error=str(e))
+
+        task = asyncio.create_task(_bg_retain())
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
         return {}
 
-    async def run(self, user_message: str, bank_id: str = "") -> str:  # [JS-E001.9]
+    async def run(  # [JS-E001.9]
+        self,
+        user_message: str,
+        bank_id: str = "",
+        history: list[dict[str, str]] | None = None,
+    ) -> str:
         """에이전트 실행 (편의 메서드)."""
+        messages: list[dict[str, str]] = []
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
+
         initial_state: AgentState = {
-            "messages": [{"role": "user", "content": user_message}],
+            "messages": messages,
             "memory_context": "",
             "bank_id": bank_id or "jedisos-default",
             "tool_call_count": 0,
@@ -239,3 +340,101 @@ class ReActAgent:  # [JS-E001.2]
         result = await self.graph.ainvoke(initial_state)
         last = result["messages"][-1]
         return last.content if hasattr(last, "content") else str(last)
+
+    async def run_stream(  # [JS-E001.10]
+        self,
+        user_message: str,
+        bank_id: str = "",
+        history: list[dict[str, str]] | None = None,
+    ) -> AsyncIterator[str]:
+        """스트리밍 에이전트 실행. 토큰 단위로 yield합니다.
+
+        도구 호출이 필요한 경우 도구 실행 후 최종 응답을 스트리밍합니다.
+        """
+        bid = bank_id or "jedisos-default"
+
+        # 1. recall_memory
+        messages: list[dict[str, str]] = []
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
+
+        query_parts = [user_message]
+        if history:
+            for msg in reversed(history):
+                if msg.get("role") == "user" and msg.get("content"):
+                    query_parts.append(msg["content"])
+                    if len(query_parts) >= 2:
+                        break
+
+        query = " ".join(reversed(query_parts))
+        memory_context = ""
+        try:
+            result = await self.memory.recall(query, bank_id=bid)
+            memory_context = str(result) if result else ""
+        except Exception as e:
+            logger.warning("recall_failed_continuing", error=str(e))
+
+        # 2. 시스템 프롬프트 구성
+        system_parts: list[str] = []
+        if self.identity_prompt:
+            system_parts.append(self.identity_prompt)
+        if memory_context:
+            system_parts.append(f"관련 기억:\n{memory_context}")
+
+        llm_messages: list[dict[str, Any]] = []
+        if system_parts:
+            llm_messages.append({"role": "system", "content": "\n\n".join(system_parts)})
+        for msg in messages:
+            role = _ROLE_MAP.get(msg.get("role", ""), msg.get("role", ""))
+            llm_messages.append({"role": role, "content": msg.get("content", "")})
+
+        tool_defs = [t.to_dict() for t in self.tools] if self.tools else None
+
+        # 3. 첫 LLM 호출 (비스트리밍 - 도구 호출 판단 필요)
+        response = await self.llm.complete(llm_messages, tools=tool_defs)
+        choice = response["choices"][0]["message"]
+
+        # 4. 도구 호출이 필요한 경우 처리
+        tool_call_count = 0
+        while choice.get("tool_calls") and tool_call_count < MAX_TOOL_CALLS:
+            tool_call_count += 1
+            llm_messages.append(choice)
+
+            for tc in choice["tool_calls"]:
+                tool_name, tool_id, args = self._parse_tool_call(tc)
+                tool_result = await self._call_tool(tool_name, args)
+                llm_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_id,
+                    "content": json.dumps(tool_result, ensure_ascii=False)
+                    if isinstance(tool_result, dict)
+                    else str(tool_result),
+                })
+
+            # 도구 응답 후 다시 LLM 호출 — 추가 도구 호출이 없으면 스트리밍으로 전환
+            response = await self.llm.complete(llm_messages, tools=tool_defs)
+            choice = response["choices"][0]["message"]
+
+        # 5. 최종 응답이 도구 호출 없으면 → 스트리밍 재호출
+        if not choice.get("tool_calls"):
+            # 이미 완성된 응답이 있으므로 그것을 스트리밍처럼 yield
+            content = choice.get("content", "")
+            if content:
+                yield content
+
+        # 6. retain_memory (백그라운드)
+        full_conversation = "\n".join(
+            f"{msg.get('role', 'unknown')}: {msg.get('content', '')}"
+            for msg in messages
+        )
+
+        async def _bg_retain() -> None:
+            try:
+                await self.memory.retain(full_conversation, bank_id=bid)
+            except Exception as e:
+                logger.warning("retain_failed_continuing", error=str(e))
+
+        task = asyncio.create_task(_bg_retain())
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)

@@ -10,6 +10,7 @@ dependencies: fastapi>=0.115
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,9 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
-_ENV_PATH = Path(".env")
+_DATA_DIR = Path(os.environ.get("JEDISOS_DATA_DIR", "."))
+_ENV_PATH = _DATA_DIR / ".env"
+_CONFIG_DIR = Path(os.environ.get("JEDISOS_CONFIG_DIR", str(_DATA_DIR / "config")))
 
 
 class SetupStatus(BaseModel):  # [JS-W006.1]
@@ -64,7 +67,7 @@ async def get_setup_status() -> SetupStatus:
                 has_api_key = True
                 break
 
-    has_llm_config = Path("config/llm_config.yaml").exists()
+    has_llm_config = (_CONFIG_DIR / "llm_config.yaml").exists()
 
     return SetupStatus(
         is_first_run=is_first_run,
@@ -97,15 +100,33 @@ async def complete_setup(request: SetupRequest) -> dict[str, str]:
 
     # 2. llm_config.yaml 생성
     models = request.models or ["gpt-5.2", "gemini/gemini-3-flash"]
-    config_dir = Path("config")
-    config_dir.mkdir(exist_ok=True)
-    llm_config_path = config_dir / "llm_config.yaml"
+    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    llm_config_path = _CONFIG_DIR / "llm_config.yaml"
 
     lines = ["# JediSOS LLM 설정\n", "models:\n"]
     for m in models:
         lines.append(f"  - {m}\n")
     lines.append("\ntemperature: 0.7\nmax_tokens: 8192\ntimeout: 60\n")
     llm_config_path.write_text("".join(lines))
+
+    # 3. 현재 프로세스 환경변수에도 반영 (재시작 없이 즉시 적용)
+    if request.openai_api_key:
+        os.environ["OPENAI_API_KEY"] = request.openai_api_key
+    if request.google_api_key:
+        os.environ["GOOGLE_API_KEY"] = request.google_api_key
+    if request.telegram_bot_token:
+        os.environ["TELEGRAM_BOT_TOKEN"] = request.telegram_bot_token
+    if request.discord_bot_token:
+        os.environ["DISCORD_BOT_TOKEN"] = request.discord_bot_token
+    if request.slack_bot_token:
+        os.environ["SLACK_BOT_TOKEN"] = request.slack_bot_token
+    if request.slack_app_token:
+        os.environ["SLACK_APP_TOKEN"] = request.slack_app_token
+
+    # 4. 채널 봇 시작 (토큰이 있는 경우)
+    from jedisos.web.app import _start_channels
+
+    await _start_channels()
 
     logger.info("setup_completed", models=models)
     return {"status": "completed"}

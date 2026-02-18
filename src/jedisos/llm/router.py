@@ -11,7 +11,10 @@ dependencies: litellm>=1.81.12
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 import litellm
 import structlog
@@ -89,6 +92,45 @@ class LLMRouter:  # [JS-C001.1]
                 continue
 
         raise LLMError(f"모든 LLM 호출 실패. 마지막 에러: {last_error}") from last_error
+
+    async def stream(  # [JS-C001.5]
+        self,
+        messages: list[dict[str, str]],
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """LLM 스트리밍 호출. 토큰 단위로 청크를 yield합니다.
+
+        tool_calls가 포함된 응답은 스트리밍하지 않고 complete()로 폴백합니다.
+        """
+        models = [model] if model else self._models
+        last_error: Exception | None = None
+
+        for m in models:
+            try:
+                call_kwargs: dict[str, Any] = {
+                    "model": m,
+                    "messages": messages,
+                    "temperature": kwargs.get("temperature", self.config.temperature),
+                    "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+                    "timeout": self.config.timeout,
+                    "stream": True,
+                }
+                if tools:
+                    call_kwargs["tools"] = tools
+
+                response = await litellm.acompletion(**call_kwargs)
+                async for chunk in response:
+                    yield chunk.model_dump()
+                logger.info("llm_stream_success", model=m)
+                return
+            except Exception as e:
+                last_error = e
+                logger.warning("llm_stream_failed", model=m, error=str(e))
+                continue
+
+        raise LLMError(f"모든 LLM 스트리밍 호출 실패. 마지막 에러: {last_error}") from last_error
 
     async def complete_text(  # [JS-C001.4]
         self,

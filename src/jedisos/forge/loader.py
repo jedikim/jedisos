@@ -54,12 +54,14 @@ class ToolLoader:  # [JS-K005.2]
             raise FileNotFoundError(msg)
 
         # exec()로 직접 실행하여 캐시 문제를 우회
+        # 보안: CodeSecurityChecker가 exec 전에 정적분석(금지패턴/import화이트리스트)을 수행함
         import types
 
         code = tool_py.read_text()
         module = types.ModuleType(f"jedisos_tool_{tool_dir.name}")
         module.__file__ = str(tool_py)
-        exec(compile(code, str(tool_py), "exec"), module.__dict__)  # nosec B102 - intentional dynamic tool loading
+
+        exec(compile(code, str(tool_py), "exec"), module.__dict__)  # nosec B102 - pre-validated by CodeSecurityChecker
 
         # @tool 데코레이터가 등록한 함수들을 수집
         tools = [

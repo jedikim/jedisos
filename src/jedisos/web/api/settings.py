@@ -10,6 +10,7 @@ dependencies: fastapi>=0.115
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +22,10 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
-# 설정 파일 기본 경로
-_CONFIG_DIR = Path("config")
-_ENV_PATH = Path(".env")
+# 설정 파일 기본 경로 (Docker: JEDISOS_DATA_DIR=/data, JEDISOS_CONFIG_DIR=/config)
+_DATA_DIR = Path(os.environ.get("JEDISOS_DATA_DIR", "."))
+_CONFIG_DIR = Path(os.environ.get("JEDISOS_CONFIG_DIR", str(_DATA_DIR / "config")))
+_ENV_PATH = _DATA_DIR / ".env"
 
 # [JS-W003.8] 웹 UI에서 수정 가능한 환경변수 키 목록
 _ALLOWED_ENV_KEYS: set[str] = {

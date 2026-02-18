@@ -13,7 +13,8 @@ COPY pyproject.toml README.md ./
 COPY src/ src/
 RUN pip install --no-cache-dir build && \
     python -m build --wheel && \
-    pip install --no-cache-dir dist/*.whl
+    pip install --no-cache-dir dist/*.whl && \
+    pip install --no-cache-dir "jedisos[channels]"
 
 # --- Stage 2: 프로덕션 ---
 FROM python:3.12-slim
@@ -22,9 +23,8 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin/jedisos /usr/local/bin/jedisos
 
-# 비-root 사용자
-RUN groupadd -r jedisos && useradd -r -g jedisos jedisos
-USER jedisos
+# 데이터 디렉토리 (설정 파일 쓰기용)
+RUN mkdir -p /data/config
 
 # 웹 UI 포트
 EXPOSE 8866

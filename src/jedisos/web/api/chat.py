@@ -2,7 +2,7 @@
 [JS-W002] jedisos.web.api.chat
 WebSocket 기반 실시간 채팅 API
 
-version: 1.0.0
+version: 1.1.0
 created: 2026-02-18
 modified: 2026-02-18
 dependencies: fastapi>=0.115
@@ -10,6 +10,7 @@ dependencies: fastapi>=0.115
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any
 
 import structlog
@@ -20,12 +21,16 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
+# bank_id별 대화 히스토리 캐시 (최근 N턴 유지)
+_MAX_HISTORY_TURNS = 20
+_conversation_history: dict[str, list[dict[str, str]]] = defaultdict(list)
+
 
 class ChatRequest(BaseModel):  # [JS-W002.1]
     """채팅 요청 모델."""
 
     message: str
-    bank_id: str = "web-default"
+    bank_id: str = "default"
     model: str | None = None
 
 
@@ -64,15 +69,17 @@ manager = ConnectionManager()
 async def websocket_chat(websocket: WebSocket) -> None:
     """WebSocket 채팅 엔드포인트.
 
-    클라이언트가 JSON 메시지를 보내면 에이전트 응답을 반환합니다.
-    형식: {"message": "안녕", "bank_id": "web-default"}
+    클라이언트가 JSON 메시지를 보내면 에이전트 응답을 스트리밍합니다.
+    형식: {"message": "안녕", "bank_id": "default"}
+    응답: {"type": "stream", "content": "토큰"} 또는
+          {"type": "done", "response": "전체 응답", "bank_id": "..."}
     """
     await manager.connect(websocket)
     try:
         while True:
             data = await websocket.receive_json()
             message = data.get("message", "")
-            bank_id = data.get("bank_id", "web-default")
+            bank_id = data.get("bank_id", "default")
 
             if not message:
                 await websocket.send_json({"error": "빈 메시지입니다."})
@@ -81,8 +88,27 @@ async def websocket_chat(websocket: WebSocket) -> None:
             logger.info("websocket_message", text_len=len(message), bank_id=bank_id)
 
             try:
-                response = await _run_agent(message, bank_id)
-                await websocket.send_json({"response": response, "bank_id": bank_id})
+                agent = _get_or_create_agent()
+                if agent is None:
+                    await websocket.send_json({"error": "서버가 아직 초기화되지 않았습니다."})
+                    continue
+
+                history = _get_history(bank_id)
+                _add_to_history(bank_id, "user", message)
+
+                full_response = ""
+                async for chunk in agent.run_stream(
+                    message, bank_id=bank_id, history=history
+                ):
+                    full_response += chunk
+                    await websocket.send_json({"type": "stream", "content": chunk})
+
+                _add_to_history(bank_id, "assistant", full_response)
+                await websocket.send_json({
+                    "type": "done",
+                    "response": full_response,
+                    "bank_id": bank_id,
+                })
             except Exception as e:
                 logger.error("websocket_agent_error", error=str(e))
                 await websocket.send_json({"error": f"처리 실패: {e}"})
@@ -105,18 +131,62 @@ async def get_connections() -> dict[str, Any]:
     return {"active_connections": manager.connection_count}
 
 
-async def _run_agent(message: str, bank_id: str, model: str | None = None) -> str:
-    """에이전트를 실행합니다."""
+def _get_history(bank_id: str) -> list[dict[str, str]]:  # [JS-W002.7]
+    """bank_id별 대화 히스토리를 반환합니다."""
+    return _conversation_history[bank_id]
+
+
+def _add_to_history(bank_id: str, role: str, content: str) -> None:  # [JS-W002.8]
+    """대화 히스토리에 메시지를 추가합니다."""
+    history = _conversation_history[bank_id]
+    history.append({"role": role, "content": content})
+    # 최대 턴 수 초과 시 오래된 메시지 제거 (2개씩 = user+assistant)
+    while len(history) > _MAX_HISTORY_TURNS * 2:
+        history.pop(0)
+
+
+def _get_or_create_agent() -> Any:  # [JS-W002.9]
+    """캐시된 에이전트를 반환하거나 새로 생성합니다."""
     from jedisos.web.app import get_app_state
 
     state = get_app_state()
+
+    # 이미 캐시된 에이전트가 있으면 재사용
+    cached = state.get("_cached_agent")
+    if cached is not None:
+        return cached
+
     memory = state.get("memory")
     llm = state.get("llm")
-
     if not memory or not llm:
-        return "서버가 아직 초기화되지 않았습니다."
+        return None
 
     from jedisos.agents.react import ReActAgent
+    from jedisos.llm.prompts import JEDISOS_IDENTITY
 
-    agent = ReActAgent(memory=memory, llm=llm)
-    return await agent.run(message, bank_id=bank_id)
+    agent = ReActAgent(
+        memory=memory,
+        llm=llm,
+        tools=state.get("builtin_tools", []),
+        tool_executor=state.get("tool_executor"),
+        identity_prompt=JEDISOS_IDENTITY,
+    )
+    state["_cached_agent"] = agent
+    logger.info("agent_cached", tool_count=len(agent.tools))
+    return agent
+
+
+async def _run_agent(message: str, bank_id: str, model: str | None = None) -> str:
+    """에이전트를 실행합니다. 대화 히스토리를 포함합니다."""
+    agent = _get_or_create_agent()
+    if agent is None:
+        return "서버가 아직 초기화되지 않았습니다."
+
+    # 이전 대화 히스토리 포함
+    history = _get_history(bank_id)
+    _add_to_history(bank_id, "user", message)
+
+    response = await agent.run(message, bank_id=bank_id, history=history)
+
+    _add_to_history(bank_id, "assistant", response)
+    return response

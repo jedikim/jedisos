@@ -189,7 +189,8 @@ modified: 2026-02-18
                 <!-- 스텝 1: API 키 설정 -->
                 <div x-show="setup.step === 1" x-transition>
                     <h2 class="text-lg font-semibold text-gray-900 mb-1">API 키 설정</h2>
-                    <p class="text-sm text-gray-500 mb-6">LLM 서비스에 접속하기 위한 API 키를 입력합니다</p>
+                    <p class="text-sm text-gray-500 mb-1">LLM 서비스에 접속하기 위한 API 키를 입력합니다</p>
+                    <p class="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-6">💡 둘 중 하나만 입력하면 됩니다. 두 개 모두 입력하면 폴백으로 사용됩니다.</p>
 
                     <div class="space-y-4">
                         <div>
@@ -217,29 +218,94 @@ modified: 2026-02-18
                 <!-- 스텝 2: 채널 설정 -->
                 <div x-show="setup.step === 2" x-transition>
                     <h2 class="text-lg font-semibold text-gray-900 mb-1">채널 설정</h2>
-                    <p class="text-sm text-gray-500 mb-6">메신저 봇 토큰을 입력합니다 (선택사항)</p>
+                    <p class="text-sm text-gray-500 mb-1">메신저 봇 토큰을 입력합니다 (선택사항)</p>
+                    <p class="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-6">💡 사용할 채널만 설정하세요. 나중에 Settings에서 변경할 수 있습니다.</p>
 
-                    <div class="space-y-4">
+                    <div class="space-y-5">
+                        <!-- Telegram -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Telegram Bot Token</label>
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="block text-sm font-medium text-gray-700">Telegram Bot Token</label>
+                                <button type="button" @click="setup.showTelegramGuide = !setup.showTelegramGuide"
+                                        class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                                    <span x-text="setup.showTelegramGuide ? '가이드 닫기' : '토큰 발급 방법'"></span>
+                                </button>
+                            </div>
+                            <div x-show="setup.showTelegramGuide" x-transition
+                                 class="mb-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 space-y-1">
+                                <p class="font-semibold">Telegram Bot Token 발급 방법:</p>
+                                <ol class="list-decimal list-inside space-y-0.5">
+                                    <li>Telegram 앱에서 <strong>@BotFather</strong>를 검색하여 대화를 시작합니다</li>
+                                    <li><strong>/newbot</strong> 명령어를 입력합니다</li>
+                                    <li>봇의 <strong>이름</strong>을 입력합니다 (예: JediSOS Assistant)</li>
+                                    <li>봇의 <strong>사용자명</strong>을 입력합니다 (반드시 <code>bot</code>으로 끝나야 합니다, 예: jedisos_bot)</li>
+                                    <li>BotFather가 <strong>토큰</strong>을 발급합니다 — 아래에 붙여넣기하세요</li>
+                                </ol>
+                                <p class="text-blue-600 mt-1">형식: <code>123456789:ABCdefGHI-jklMNOpqrSTUvwxYZ</code></p>
+                            </div>
                             <input type="password" autocomplete="off" x-model="setup.telegramToken"
                                    placeholder="123456:ABC-DEF..."
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
                         </div>
+
+                        <!-- Discord -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Discord Bot Token</label>
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="block text-sm font-medium text-gray-700">Discord Bot Token</label>
+                                <button type="button" @click="setup.showDiscordGuide = !setup.showDiscordGuide"
+                                        class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                                    <span x-text="setup.showDiscordGuide ? '가이드 닫기' : '토큰 발급 방법'"></span>
+                                </button>
+                            </div>
+                            <div x-show="setup.showDiscordGuide" x-transition
+                                 class="mb-2 p-3 bg-purple-50 border border-purple-200 rounded-lg text-xs text-purple-800 space-y-1">
+                                <p class="font-semibold">Discord Bot Token 발급 방법:</p>
+                                <ol class="list-decimal list-inside space-y-0.5">
+                                    <li><a href="https://discord.com/developers/applications" target="_blank" class="underline font-medium">Discord Developer Portal</a>에 접속합니다</li>
+                                    <li><strong>New Application</strong> 클릭 → 이름 입력 → Create</li>
+                                    <li>왼쪽 메뉴에서 <strong>Bot</strong> 클릭</li>
+                                    <li><strong>Reset Token</strong> 클릭 → 토큰을 복사합니다</li>
+                                    <li><strong>Privileged Gateway Intents</strong>에서 <strong>Message Content Intent</strong>를 켜고 Save</li>
+                                    <li>왼쪽 <strong>OAuth2 → URL Generator</strong>에서 <code>bot</code> + <code>applications.commands</code> 체크</li>
+                                    <li>Bot Permissions에서 <strong>Send Messages, Read Message History</strong> 체크</li>
+                                    <li>생성된 URL로 접속하여 봇을 서버에 초대합니다</li>
+                                </ol>
+                            </div>
                             <input type="password" autocomplete="off" x-model="setup.discordToken"
                                    placeholder="MTIz..."
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
                         </div>
+
+                        <!-- Slack -->
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Slack Bot Token</label>
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="block text-sm font-medium text-gray-700">Slack Bot Token + App Token</label>
+                                <button type="button" @click="setup.showSlackGuide = !setup.showSlackGuide"
+                                        class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                                    <span x-text="setup.showSlackGuide ? '가이드 닫기' : '토큰 발급 방법'"></span>
+                                </button>
+                            </div>
+                            <div x-show="setup.showSlackGuide" x-transition
+                                 class="mb-2 p-3 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800 space-y-1">
+                                <p class="font-semibold">Slack Bot Token + App Token 발급 방법:</p>
+                                <ol class="list-decimal list-inside space-y-0.5">
+                                    <li><a href="https://api.slack.com/apps" target="_blank" class="underline font-medium">Slack API</a>에 접속 → <strong>Create New App</strong> → <strong>From scratch</strong></li>
+                                    <li>앱 이름 입력 (예: JediSOS) + 워크스페이스 선택 → Create</li>
+                                    <li>왼쪽 <strong>OAuth & Permissions</strong> → Bot Token Scopes에서 <code>chat:write</code>, <code>app_mentions:read</code> 추가</li>
+                                    <li><strong>Install to Workspace</strong> 클릭 → Allow</li>
+                                    <li><strong>Bot User OAuth Token</strong> (<code>xoxb-...</code>)을 복사합니다</li>
+                                </ol>
+                                <p class="font-semibold mt-2">App Token (Socket Mode):</p>
+                                <ol class="list-decimal list-inside space-y-0.5" start="6">
+                                    <li>왼쪽 <strong>Socket Mode</strong> → Enable Socket Mode 켜기</li>
+                                    <li>왼쪽 <strong>Basic Information</strong> → App-Level Tokens → <strong>Generate Token and Scopes</strong></li>
+                                    <li>토큰 이름 입력 + <code>connections:write</code> scope 추가 → Generate</li>
+                                    <li><strong>App-Level Token</strong> (<code>xapp-...</code>)을 복사합니다</li>
+                                </ol>
+                            </div>
                             <input type="password" autocomplete="off" x-model="setup.slackBotToken"
                                    placeholder="xoxb-..."
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Slack App Token</label>
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition mb-2">
                             <input type="password" autocomplete="off" x-model="setup.slackAppToken"
                                    placeholder="xapp-..."
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
@@ -552,7 +618,7 @@ modified: 2026-02-18
         <section x-show="currentPage === 'packages'" x-transition class="max-w-4xl mx-auto w-full px-4 py-6">
             <div class="flex items-center justify-between mb-6">
                 <h1 class="text-2xl font-bold text-gray-900">패키지</h1>
-                <button @click="loadServers(); loadRecommended()"
+                <button @click="loadSkills(); loadServers(); loadRecommended()"
                         class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
                     <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -561,100 +627,238 @@ modified: 2026-02-18
                 </button>
             </div>
 
-            <!-- 설치된 서버 -->
-            <div class="bg-white rounded-xl border border-gray-200 mb-6">
-                <div class="p-4 border-b border-gray-200">
-                    <h2 class="text-sm font-semibold text-gray-900">설치된 MCP 서버</h2>
+            <!-- 서브 탭: Skills / MCP 서버 -->
+            <div class="flex items-center gap-1 border-b border-gray-200 mb-6 overflow-x-auto">
+                <button @click="packagesTab = 'skills'"
+                        :class="packagesTab === 'skills' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    Skills
+                    <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full" x-text="packages.skills.length"></span>
+                </button>
+                <button @click="packagesTab = 'mcp'"
+                        :class="packagesTab === 'mcp' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                        class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                    </svg>
+                    MCP 서버
+                    <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full" x-text="packages.servers.length"></span>
+                </button>
+            </div>
+
+            <!-- ===== Skills 탭 ===== -->
+            <div x-show="packagesTab === 'skills'" x-transition>
+                <!-- 내장 도구 안내 -->
+                <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6">
+                    <div class="flex items-start gap-3">
+                        <svg class="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <div class="text-sm text-indigo-800">
+                            <p class="font-medium mb-1">Skill 자동 생성</p>
+                            <p class="text-indigo-700">채팅에서 "날씨 도구 만들어줘", "번역 기능 추가해" 등을 말하면 AI가 자동으로 Skill을 생성합니다. 생성된 Skill은 보안 검사 후 즉시 사용 가능합니다.</p>
+                        </div>
+                    </div>
                 </div>
-                <div x-show="packages.servers.length === 0" class="p-8 text-center text-gray-500 text-sm">
-                    설치된 MCP 서버가 없습니다
-                </div>
-                <div class="divide-y divide-gray-200">
-                    <template x-for="server in packages.servers" :key="server.name">
-                        <div class="p-4 flex items-center justify-between">
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-sm font-medium text-gray-900" x-text="server.name"></span>
-                                    <span :class="server.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'"
-                                          class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                                          x-text="server.enabled ? '활성' : '비활성'"></span>
+
+                <!-- 설치된 Skills -->
+                <div class="bg-white rounded-xl border border-gray-200 mb-6">
+                    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                        <h2 class="text-sm font-semibold text-gray-900">설치된 Skills</h2>
+                        <span class="text-xs text-gray-500" x-text="packages.skills.filter(s => s.enabled).length + '/' + packages.skills.length + ' 활성'"></span>
+                    </div>
+                    <div x-show="packages.skills.length === 0" class="p-8 text-center text-gray-500 text-sm">
+                        <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                        <p>설치된 Skill이 없습니다</p>
+                        <p class="text-xs text-gray-400 mt-1">채팅에서 AI에게 새로운 도구를 만들어달라고 요청해보세요</p>
+                    </div>
+                    <div class="divide-y divide-gray-200">
+                        <template x-for="skill in packages.skills" :key="skill.name">
+                            <div class="p-4 flex items-center justify-between">
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="text-sm font-medium text-gray-900" x-text="skill.name"></span>
+                                        <span :class="skill.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'"
+                                              class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                                              x-text="skill.enabled ? '활성' : '비활성'"></span>
+                                        <span x-show="skill.auto_generated"
+                                              class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                                            자동 생성
+                                        </span>
+                                        <span class="text-xs text-gray-400" x-text="'v' + skill.version"></span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 mt-0.5 truncate" x-text="skill.description || '설명 없음'"></p>
+                                    <div x-show="skill.tags && skill.tags.length > 0" class="flex flex-wrap gap-1 mt-1">
+                                        <template x-for="tag in skill.tags" :key="tag">
+                                            <span class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded" x-text="tag"></span>
+                                        </template>
+                                    </div>
                                 </div>
-                                <p class="text-xs text-gray-500 mt-0.5 truncate" x-text="server.description || server.url"></p>
+                                <div class="flex items-center gap-2 ml-4">
+                                    <button @click="toggleSkill(skill.name)"
+                                            :class="skill.enabled ? 'bg-indigo-600' : 'bg-gray-300'"
+                                            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                                        <span :class="skill.enabled ? 'translate-x-5' : 'translate-x-0'"
+                                              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out mt-0.5 ml-0.5"></span>
+                                    </button>
+                                    <button x-show="skill.auto_generated" @click="removeSkill(skill.name)"
+                                            class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                            title="삭제 (자동 생성된 Skill만 가능)">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="flex items-center gap-2 ml-4">
-                                <button @click="toggleServer(server.name)"
-                                        :class="server.enabled ? 'bg-indigo-600' : 'bg-gray-300'"
-                                        class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
-                                    <span :class="server.enabled ? 'translate-x-5' : 'translate-x-0'"
-                                          class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out mt-0.5 ml-0.5"></span>
-                                </button>
-                                <button @click="removeServer(server.name)"
-                                        class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </template>
-                </div>
-            </div>
-
-            <!-- 서버 추가 폼 -->
-            <div class="bg-white rounded-xl border border-gray-200 mb-6">
-                <div class="p-4 border-b border-gray-200">
-                    <h2 class="text-sm font-semibold text-gray-900">새 MCP 서버 추가</h2>
-                </div>
-                <div class="p-4 space-y-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">서버 이름</label>
-                            <input type="text" x-model="packages.newServer.name"
-                                   placeholder="my-mcp-server"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">URL</label>
-                            <input type="text" x-model="packages.newServer.url"
-                                   placeholder="http://localhost:3000/mcp"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
-                        </div>
+                        </template>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">설명</label>
-                        <input type="text" x-model="packages.newServer.description"
-                               placeholder="서버 설명을 입력하세요"
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
-                    </div>
-                    <button @click="installServer()"
-                            :disabled="!packages.newServer.name || !packages.newServer.url"
-                            class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        서버 추가
-                    </button>
                 </div>
-            </div>
 
-            <!-- 추천 서버 -->
-            <div class="bg-white rounded-xl border border-gray-200">
-                <div class="p-4 border-b border-gray-200">
-                    <h2 class="text-sm font-semibold text-gray-900">추천 MCP 서버</h2>
-                </div>
-                <div x-show="packages.recommended.length === 0" class="p-8 text-center text-gray-500 text-sm">
-                    추천 서버 정보를 불러오는 중...
-                </div>
-                <div class="divide-y divide-gray-200">
-                    <template x-for="rec in packages.recommended" :key="rec.name">
+                <!-- 내장 도구 (항상 활성) -->
+                <div class="bg-white rounded-xl border border-gray-200">
+                    <div class="p-4 border-b border-gray-200">
+                        <h2 class="text-sm font-semibold text-gray-900">내장 도구</h2>
+                    </div>
+                    <div class="divide-y divide-gray-200">
                         <div class="p-4 flex items-center justify-between">
-                            <div class="flex-1 min-w-0">
-                                <span class="text-sm font-medium text-gray-900" x-text="rec.name"></span>
-                                <p class="text-xs text-gray-500 mt-0.5" x-text="rec.description"></p>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium text-gray-900">recall_memory</span>
+                                    <span class="bg-blue-100 text-blue-800 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium">내장</span>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-0.5">장기 기억에서 정보를 검색합니다</p>
                             </div>
-                            <button @click="packages.newServer.name = rec.name; packages.newServer.url = rec.url; packages.newServer.description = rec.description || ''"
-                                    class="ml-4 px-3 py-1.5 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-medium hover:bg-indigo-50 transition-colors whitespace-nowrap">
-                                설정에 추가
-                            </button>
+                            <span class="text-xs text-green-600 font-medium">항상 활성</span>
                         </div>
-                    </template>
+                        <div class="p-4 flex items-center justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium text-gray-900">retain_memory</span>
+                                    <span class="bg-blue-100 text-blue-800 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium">내장</span>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-0.5">중요한 정보를 장기 기억에 저장합니다</p>
+                            </div>
+                            <span class="text-xs text-green-600 font-medium">항상 활성</span>
+                        </div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-sm font-medium text-gray-900">create_skill</span>
+                                    <span class="bg-blue-100 text-blue-800 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium">내장</span>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-0.5">새로운 도구/스킬을 자동으로 생성합니다 (Forge)</p>
+                            </div>
+                            <span class="text-xs text-green-600 font-medium">항상 활성</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== MCP 서버 탭 ===== -->
+            <div x-show="packagesTab === 'mcp'" x-transition>
+                <!-- 설치된 서버 -->
+                <div class="bg-white rounded-xl border border-gray-200 mb-6">
+                    <div class="p-4 border-b border-gray-200">
+                        <h2 class="text-sm font-semibold text-gray-900">설치된 MCP 서버</h2>
+                    </div>
+                    <div x-show="packages.servers.length === 0" class="p-8 text-center text-gray-500 text-sm">
+                        <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                        </svg>
+                        설치된 MCP 서버가 없습니다
+                    </div>
+                    <div class="divide-y divide-gray-200">
+                        <template x-for="server in packages.servers" :key="server.name">
+                            <div class="p-4 flex items-center justify-between">
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-sm font-medium text-gray-900" x-text="server.name"></span>
+                                        <span :class="server.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'"
+                                              class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                                              x-text="server.enabled ? '활성' : '비활성'"></span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 mt-0.5 truncate" x-text="server.description || server.url"></p>
+                                </div>
+                                <div class="flex items-center gap-2 ml-4">
+                                    <button @click="toggleServer(server.name)"
+                                            :class="server.enabled ? 'bg-indigo-600' : 'bg-gray-300'"
+                                            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full transition-colors duration-200 ease-in-out">
+                                        <span :class="server.enabled ? 'translate-x-5' : 'translate-x-0'"
+                                              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out mt-0.5 ml-0.5"></span>
+                                    </button>
+                                    <button @click="removeServer(server.name)"
+                                            class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- 서버 추가 폼 -->
+                <div class="bg-white rounded-xl border border-gray-200 mb-6">
+                    <div class="p-4 border-b border-gray-200">
+                        <h2 class="text-sm font-semibold text-gray-900">새 MCP 서버 추가</h2>
+                    </div>
+                    <div class="p-4 space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">서버 이름</label>
+                                <input type="text" x-model="packages.newServer.name"
+                                       placeholder="my-mcp-server"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">URL</label>
+                                <input type="text" x-model="packages.newServer.url"
+                                       placeholder="http://localhost:3000/mcp"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">설명</label>
+                            <input type="text" x-model="packages.newServer.description"
+                                   placeholder="서버 설명을 입력하세요"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition">
+                        </div>
+                        <button @click="installServer()"
+                                :disabled="!packages.newServer.name || !packages.newServer.url"
+                                class="px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            서버 추가
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 추천 서버 -->
+                <div class="bg-white rounded-xl border border-gray-200">
+                    <div class="p-4 border-b border-gray-200">
+                        <h2 class="text-sm font-semibold text-gray-900">추천 MCP 서버</h2>
+                    </div>
+                    <div x-show="packages.recommended.length === 0" class="p-8 text-center text-gray-500 text-sm">
+                        추천 서버 정보를 불러오는 중...
+                    </div>
+                    <div class="divide-y divide-gray-200">
+                        <template x-for="rec in packages.recommended" :key="rec.name">
+                            <div class="p-4 flex items-center justify-between">
+                                <div class="flex-1 min-w-0">
+                                    <span class="text-sm font-medium text-gray-900" x-text="rec.name"></span>
+                                    <p class="text-xs text-gray-500 mt-0.5" x-text="rec.description"></p>
+                                </div>
+                                <button @click="packages.newServer.name = rec.name; packages.newServer.url = rec.url; packages.newServer.description = rec.description || ''; packagesTab = 'mcp'"
+                                        class="ml-4 px-3 py-1.5 border border-indigo-200 text-indigo-700 rounded-lg text-xs font-medium hover:bg-indigo-50 transition-colors whitespace-nowrap">
+                                    설정에 추가
+                                </button>
+                            </div>
+                        </template>
+                    </div>
                 </div>
             </div>
         </section>

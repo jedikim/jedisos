@@ -154,9 +154,9 @@ class TestPrompts:  # [JS-T004.4]
         assert "JediSOS" in prompt
         assert "Bob" in prompt
 
-    def test_build_system_prompt_with_tools(self):
-        prompt = build_system_prompt(has_tools=True)
-        assert "도구" in prompt
+    def test_build_system_prompt_no_identity(self):
+        prompt = build_system_prompt()
+        assert "JediSOS" in prompt
 
 
 class TestYAMLConfigChange:  # [JS-T004.5]

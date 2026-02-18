@@ -10,6 +10,7 @@ dependencies: python-telegram-bot>=22.6
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -33,6 +34,10 @@ if TYPE_CHECKING:
     from jedisos.security.pdp import PolicyDecisionPoint
 
 logger = structlog.get_logger()
+
+# 사용자별 대화 히스토리 (최근 20턴)
+_MAX_HISTORY = 20
+_telegram_history: dict[str, list[dict[str, str]]] = defaultdict(list)
 
 
 class TelegramChannel:  # [JS-F001.1]
@@ -136,6 +141,12 @@ class TelegramChannel:  # [JS-F001.1]
 
         try:
             response = await self._process_envelope(envelope)
+            # 대화 히스토리에 추가
+            history = _telegram_history[user_id]
+            history.append({"role": "user", "content": content})
+            history.append({"role": "assistant", "content": response})
+            while len(history) > _MAX_HISTORY * 2:
+                history.pop(0)
             await update.message.reply_text(response)
         except ChannelError as e:
             logger.error("telegram_processing_failed", user_id=user_id, error=str(e))
@@ -178,11 +189,12 @@ class TelegramChannel:  # [JS-F001.1]
 
         envelope.transition(EnvelopeState.AUTHORIZED)
 
-        # 2. 에이전트 실행
+        # 2. 에이전트 실행 (대화 히스토리 포함)
         envelope.transition(EnvelopeState.PROCESSING)
         try:
             bank_id = f"telegram-{envelope.user_id}"
-            response = await self.agent.run(envelope.content, bank_id=bank_id)
+            history = _telegram_history.get(envelope.user_id, [])
+            response = await self.agent.run(envelope.content, bank_id=bank_id, history=history)
             envelope.response = response
             envelope.transition(EnvelopeState.COMPLETED)
 

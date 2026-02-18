@@ -6,8 +6,10 @@ version: 1.0.0
 created: 2026-02-18
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 from jedisos.forge.decorator import tool
-from jedisos.forge.generator import SkillGenerator
+from jedisos.forge.generator import SKILL_MEMORY_BANK, SkillGenerator
 from jedisos.forge.security import (
     ALLOWED_IMPORTS,
     FORBIDDEN_PATTERNS,
@@ -210,6 +212,186 @@ async def t() -> str:
 
 class TestSkillGenerator:  # [JS-T012.3]
     """Skill 코드 생성기 테스트."""
+
+    async def test_generate_with_memory(self, tmp_path):
+        """Hindsight 메모리와 함께 생성 — 메모리에 retain 호출 확인."""
+        mock_memory = AsyncMock()
+        mock_memory.recall.return_value = {"context": ""}
+        mock_memory.retain.return_value = {"status": "ok"}
+
+        generator = SkillGenerator(output_dir=tmp_path, memory=mock_memory)
+        spec = {
+            "tool_name": "calc_mem",
+            "description": "메모리 테스트 계산기",
+            "template": "basic_tool",
+            "tags": ["test"],
+            "env_required": [],
+            "functions": [
+                {
+                    "name": "add",
+                    "description": "더하기",
+                    "parameters": "a: int, b: int",
+                    "return_type": "int",
+                    "docstring": "두 수를 더합니다.",
+                    "implementation": "return a + b",
+                }
+            ],
+        }
+
+        result = await generator.generate("계산기", llm_response=spec)
+        assert result.success is True
+
+        # Hindsight recall 호출 확인 (유사 스킬 검색)
+        mock_memory.recall.assert_called_once_with(query="skill: 계산기", bank_id=SKILL_MEMORY_BANK)
+
+        # Hindsight retain 호출 확인 (생성된 스킬 기록)
+        mock_memory.retain.assert_called_once()
+        retain_args = mock_memory.retain.call_args
+        assert "calc_mem" in retain_args.kwargs["content"]
+        assert retain_args.kwargs["bank_id"] == SKILL_MEMORY_BANK
+
+    async def test_generate_without_memory(self, tmp_path):
+        """메모리 없이도 정상 동작 확인."""
+        generator = SkillGenerator(output_dir=tmp_path, memory=None)
+        spec = {
+            "tool_name": "no_mem",
+            "description": "메모리 없는 도구",
+            "template": "basic_tool",
+            "tags": [],
+            "env_required": [],
+            "functions": [
+                {
+                    "name": "echo",
+                    "description": "에코",
+                    "parameters": "msg: str",
+                    "return_type": "str",
+                    "docstring": "그대로 반환",
+                    "implementation": "return msg",
+                }
+            ],
+        }
+        result = await generator.generate("에코 도구", llm_response=spec)
+        assert result.success is True
+
+    async def test_search_web(self, tmp_path):
+        """웹 검색 성공 시 참조 코드 반환."""
+        generator = SkillGenerator(output_dir=tmp_path)
+
+        mock_results = [
+            {
+                "title": "Weather API Example",
+                "body": "Use Open-Meteo...",
+                "href": "https://example.com",
+            },
+            {"title": "Python httpx", "body": "async HTTP client", "href": "https://example2.com"},
+        ]
+
+        with patch("ddgs.DDGS") as mock_ddgs_cls:
+            mock_ddgs = MagicMock()
+            mock_ddgs.__enter__ = MagicMock(return_value=mock_ddgs)
+            mock_ddgs.__exit__ = MagicMock(return_value=False)
+            mock_ddgs.text.return_value = mock_results
+            mock_ddgs_cls.return_value = mock_ddgs
+
+            result = await generator._search_web("날씨 도구")
+            assert "Weather API Example" in result
+            assert "Open-Meteo" in result
+
+    async def test_search_web_no_results(self, tmp_path):
+        """웹 검색 결과 없을 시 빈 문자열 반환."""
+        generator = SkillGenerator(output_dir=tmp_path)
+
+        with patch("ddgs.DDGS") as mock_ddgs_cls:
+            mock_ddgs = MagicMock()
+            mock_ddgs.__enter__ = MagicMock(return_value=mock_ddgs)
+            mock_ddgs.__exit__ = MagicMock(return_value=False)
+            mock_ddgs.text.return_value = []
+            mock_ddgs_cls.return_value = mock_ddgs
+
+            result = await generator._search_web("존재하지 않는 도구")
+            assert result == ""
+
+    async def test_search_web_exception(self, tmp_path):
+        """웹 검색 실패 시 빈 문자열 반환."""
+        generator = SkillGenerator(output_dir=tmp_path)
+
+        with patch("ddgs.DDGS") as mock_ddgs_cls:
+            mock_ddgs_cls.side_effect = Exception("network error")
+            result = await generator._search_web("날씨")
+            assert result == ""
+
+    async def test_search_similar_skills(self, tmp_path):
+        """Hindsight에서 유사 스킬 검색."""
+        mock_memory = AsyncMock()
+        mock_memory.recall.return_value = {"context": "[스킬 생성됨] weather\n설명: 날씨 조회"}
+
+        generator = SkillGenerator(output_dir=tmp_path, memory=mock_memory)
+        result = await generator._search_similar_skills("날씨 도구")
+        assert "weather" in result
+        assert "날씨 조회" in result
+
+    async def test_search_similar_skills_no_memory(self, tmp_path):
+        """메모리 없으면 빈 문자열."""
+        generator = SkillGenerator(output_dir=tmp_path, memory=None)
+        result = await generator._search_similar_skills("날씨")
+        assert result == ""
+
+    async def test_retain_skill_deletion(self, tmp_path):
+        """삭제 이력이 Hindsight에 기록되는지 확인."""
+        mock_memory = AsyncMock()
+        mock_memory.retain.return_value = {"status": "ok"}
+
+        generator = SkillGenerator(output_dir=tmp_path, memory=mock_memory)
+        await generator.retain_skill_deletion(tool_name="old_weather", description="날씨 도구")
+
+        mock_memory.retain.assert_called_once()
+        retain_args = mock_memory.retain.call_args
+        assert "삭제됨" in retain_args.kwargs["content"]
+        assert "old_weather" in retain_args.kwargs["content"]
+        assert "재생성하지 마세요" in retain_args.kwargs["content"]
+
+    async def test_error_feedback_in_retry(self, tmp_path):
+        """에러 피드백이 재시도 프롬프트에 포함되는지 확인."""
+        mock_memory = AsyncMock()
+        mock_memory.recall.return_value = {"context": ""}
+
+        generator = SkillGenerator(output_dir=tmp_path, max_retries=2, memory=mock_memory)
+
+        # 첫 번째: 잘못된 이름으로 실패, 두 번째: 성공
+        bad_spec = {
+            "tool_name": "bad-name!",
+            "description": "실패",
+            "tags": [],
+            "env_required": [],
+            "code": "pass",
+        }
+        good_spec = {
+            "tool_name": "good_name",
+            "description": "성공",
+            "template": "basic_tool",
+            "tags": [],
+            "env_required": [],
+            "functions": [
+                {
+                    "name": "ok",
+                    "description": "ok",
+                    "parameters": "",
+                    "return_type": "str",
+                    "docstring": "ok",
+                    "implementation": "return 'ok'",
+                }
+            ],
+        }
+
+        with (
+            patch.object(generator, "_call_llm", side_effect=[bad_spec, good_spec]) as mock_llm,
+            patch.object(generator, "_search_web", return_value="ref code"),
+        ):
+            result = await generator.generate("도구 만들기")
+            assert result.success is True
+            # 두 번째 호출에 에러 컨텍스트가 포함되어야 함
+            second_call = mock_llm.call_args_list[1]
+            assert "bad-name" in second_call.kwargs.get("error_context", "")
 
     async def test_generate_with_spec(self, tmp_path):
         generator = SkillGenerator(output_dir=tmp_path)

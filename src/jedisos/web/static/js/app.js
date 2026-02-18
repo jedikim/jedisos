@@ -47,6 +47,9 @@ function app() {
             slackAppToken: '',
             models: 'gpt-5.2, gemini/gemini-3-flash',
             saving: false,
+            showTelegramGuide: false,
+            showDiscordGuide: false,
+            showSlackGuide: false,
         },
 
         // ──────────────────────────────
@@ -72,7 +75,9 @@ function app() {
         // ──────────────────────────────
         // 패키지 상태
         // ──────────────────────────────
+        packagesTab: 'skills',
         packages: {
+            skills: [],
             servers: [],
             recommended: [],
             newServer: { name: '', url: '', description: '' },
@@ -170,6 +175,7 @@ function app() {
                 this.loadLLMSettings();
                 this.loadSecuritySettings();
             } else if (page === 'packages') {
+                this.loadSkills();
                 this.loadServers();
                 this.loadRecommended();
             } else if (page === 'monitoring') {
@@ -265,17 +271,49 @@ function app() {
                                 content: '오류: ' + data.error,
                                 time: this.now(),
                             });
+                            this.chat.sending = false;
+                        } else if (data.type === 'stream') {
+                            // 스트리밍: 마지막 assistant 메시지에 토큰 추가
+                            const msgs = this.chat.messages;
+                            const last = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+                            if (last && last.role === 'assistant' && last._streaming) {
+                                last.content += data.content;
+                            } else {
+                                msgs.push({
+                                    role: 'assistant',
+                                    content: data.content,
+                                    time: this.now(),
+                                    _streaming: true,
+                                });
+                            }
+                        } else if (data.type === 'done') {
+                            // 스트리밍 완료: _streaming 플래그 제거
+                            const msgs = this.chat.messages;
+                            const last = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+                            if (last && last._streaming) {
+                                last._streaming = false;
+                                last.content = data.response;
+                            } else {
+                                msgs.push({
+                                    role: 'assistant',
+                                    content: data.response,
+                                    time: this.now(),
+                                });
+                            }
+                            this.chat.sending = false;
                         } else if (data.response) {
+                            // 레거시 호환 (비스트리밍)
                             this.chat.messages.push({
                                 role: 'assistant',
                                 content: data.response,
                                 time: this.now(),
                             });
+                            this.chat.sending = false;
                         }
                     } catch (e) {
                         console.error('메시지 파싱 실패:', e);
+                        this.chat.sending = false;
                     }
-                    this.chat.sending = false;
                     this.$nextTick(() => this.scrollToBottom());
                 };
 
@@ -442,8 +480,52 @@ function app() {
         },
 
         // ══════════════════════════════
-        // 패키지 메서드
+        // 패키지 메서드 (Skills + MCP)
         // ══════════════════════════════
+
+        /**
+         * Skill 목록 로드.  [JS-W010.24]
+         */
+        async loadSkills() {
+            try {
+                const data = await this.api('GET', '/api/skills/');
+                this.packages.skills = data.skills || [];
+            } catch (e) {
+                console.error('Skill 목록 로드 실패:', e);
+            }
+        },
+
+        /**
+         * Skill 삭제.  [JS-W010.25]
+         *
+         * @param {string} name - Skill 이름
+         */
+        async removeSkill(name) {
+            if (!confirm(name + ' Skill을 삭제하시겠습니까?')) {
+                return;
+            }
+            try {
+                await this.api('DELETE', '/api/skills/' + encodeURIComponent(name));
+                this.showToast(name + ' Skill 삭제 완료');
+                await this.loadSkills();
+            } catch (e) {
+                this.showToast('Skill 삭제 실패: ' + e.message, 'error');
+            }
+        },
+
+        /**
+         * Skill 토글 (활성/비활성).  [JS-W010.26]
+         *
+         * @param {string} name - Skill 이름
+         */
+        async toggleSkill(name) {
+            try {
+                await this.api('PUT', '/api/skills/' + encodeURIComponent(name) + '/toggle');
+                await this.loadSkills();
+            } catch (e) {
+                this.showToast('Skill 토글 실패: ' + e.message, 'error');
+            }
+        },
 
         /**
          * 설치된 서버 목록 로드.  [JS-W010.18]
