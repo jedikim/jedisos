@@ -80,7 +80,7 @@ If the tool needs AI/NLP processing or memory storage/recall, import and use the
 Example (NLP query parsing + API call):
 from jedisos.forge.context import llm_complete
 parsed = await llm_complete(
-    f"Extract the stock name from this query: {query}",
+    f"Extract the stock name from this query: {{query}}",
     system="Extract the company/stock name. Return ONLY the name, nothing else.",
     temperature=0.0,
 )
