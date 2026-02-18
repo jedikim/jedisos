@@ -2,7 +2,7 @@
 [JS-K002] jedisos.forge.tester
 생성된 Skill 코드 자동 검증 - AST/보안/패턴/타입/데코레이터 일괄 테스트
 
-version: 1.1.0
+version: 1.2.0
 created: 2026-02-18
 modified: 2026-02-18
 """
@@ -69,12 +69,14 @@ Tool description: {tool_description}
 Parameters: {parameters}
 
 Rules:
-1. Test case 1: Normal/happy-path with realistic input
+1. Test case 1: Normal/happy-path with realistic input. \
+If the tool handles Korean, use KOREAN text (e.g., "삼성전자 주가 알려줘", not "Samsung").
 2. Test case 2: Edge case (empty string, boundary value, special characters)
-3. Test case 3: Another valid input (different from #1)
-4. All kwargs must match the function's parameter names and types exactly
-5. expect_error should be false for most cases (the tool should handle errors gracefully)
-6. If the tool description mentions Korean input, include Korean text in test inputs
+3. Test case 3: Another valid input (different from #1), also in the tool's primary language.
+4. All kwargs must match the function's parameter names and types exactly.
+5. expect_error should be false for most cases (the tool should handle errors gracefully).
+6. IMPORTANT: If the tool description is in Korean or mentions Korean data, \
+ALL happy-path test inputs MUST use Korean text. Never use English translations.
 
 Return a JSON array:
 [
@@ -405,17 +407,33 @@ class SkillTester:  # [JS-K002.2]
 
                 elapsed = time.monotonic() - start
 
-                # 함수가 정상 반환하면 항상 PASS
-                # (expect_error=True여도 함수가 내부적으로 에러를 처리한 경우 유효)
-                # (dict에 ok: False여도 유효한 응답)
-                results.append(
-                    RuntimeTestResult(
-                        test_case=tc,
-                        passed=True,
-                        output=output,
-                        elapsed_seconds=elapsed,
+                # dict 응답에서 ok: False인 경우 → 실패로 처리  [JS-K002.14]
+                # (API 호출 실패, URL 404 등 도구 내부 에러를 감지)
+                if (
+                    isinstance(output, dict)
+                    and output.get("ok") is False
+                    and not tc.expect_error
+                ):
+                    err_msg = output.get("error", "")
+                    err_detail = output.get("message", "")
+                    results.append(
+                        RuntimeTestResult(
+                            test_case=tc,
+                            passed=False,
+                            output=output,
+                            error=f"도구가 ok=False 반환: {err_msg} - {err_detail}",
+                            elapsed_seconds=elapsed,
+                        )
                     )
-                )
+                else:
+                    results.append(
+                        RuntimeTestResult(
+                            test_case=tc,
+                            passed=True,
+                            output=output,
+                            elapsed_seconds=elapsed,
+                        )
+                    )
 
             except TimeoutError:
                 elapsed = time.monotonic() - start

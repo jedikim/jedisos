@@ -2,7 +2,7 @@
 [JS-K001] jedisos.forge.generator
 LLM 기반 Skill 코드 생성기 - 멀티 웹 검색 + 페이지 크롤링 + Hindsight 스킬 메모리 + 에러 피드백 루프
 
-version: 1.4.0
+version: 1.5.0
 created: 2026-02-18
 modified: 2026-02-18
 dependencies: jinja2>=3.1, litellm>=1.81, ddgs>=8.0, httpx>=0.28
@@ -48,6 +48,9 @@ jedisos.forge.context (for AI/LLM and memory features)
 7. Use free, no-API-key-required JSON/REST APIs whenever possible.
 8. NEVER scrape HTML web pages. HTML scraping is fragile, gets blocked (HTTP 403/500), \
 and breaks when page layout changes. Always find and use structured JSON API endpoints instead.
+11. NEVER use raw.githubusercontent.com URLs for data files — they frequently 404 when \
+repos restructure. Instead, use official APIs or well-known public service endpoints. \
+For Korean stock data, use Naver Finance API (polling.finance.naver.com) which is free and reliable.
 9. If the user's request implies non-English input (Korean, Japanese, etc.), \
 make sure the tool handles that language properly. Choose APIs that support \
 the relevant language for geocoding, search, etc.
