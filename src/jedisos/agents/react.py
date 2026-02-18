@@ -356,10 +356,11 @@ class ReActAgent:  # [JS-E001.2]
         """스트리밍 에이전트 실행. 토큰 단위로 yield합니다.
 
         도구 호출이 필요한 경우 도구 실행 후 최종 응답을 스트리밍합니다.
+        recall에 3초 타임아웃을 적용하여 응답 지연을 최소화합니다.
         """
         bid = bank_id or "jedisos-default"
 
-        # 1. recall_memory
+        # 1. recall_memory (3초 타임아웃 — 느린 recall이 응답을 막지 않도록)
         messages: list[dict[str, str]] = []
         if history:
             messages.extend(history)
@@ -376,8 +377,10 @@ class ReActAgent:  # [JS-E001.2]
         query = " ".join(reversed(query_parts))
         memory_context = ""
         try:
-            result = await self.memory.recall(query, bank_id=bid)
+            result = await asyncio.wait_for(self.memory.recall(query, bank_id=bid), timeout=3.0)
             memory_context = str(result) if result else ""
+        except TimeoutError:
+            logger.warning("recall_timeout", bank_id=bid)
         except Exception as e:
             logger.warning("recall_failed_continuing", error=str(e))
 
@@ -397,17 +400,65 @@ class ReActAgent:  # [JS-E001.2]
 
         tool_defs = [t.to_dict() for t in self.tools] if self.tools else None
 
-        # 3. 첫 LLM 호출 (비스트리밍 - 도구 호출 판단 필요)
-        response = await self.llm.complete(llm_messages, tools=tool_defs)
-        choice = response["choices"][0]["message"]
-
-        # 4. 도구 호출이 필요한 경우 처리
+        # 3. 스트리밍 LLM 호출
+        #    - 텍스트 응답: 토큰 즉시 yield (실시간 스트리밍)
+        #    - 도구 호출: 델타 누적 → 실행 → 다시 스트리밍 호출
+        content = ""
         tool_call_count = 0
-        while choice.get("tool_calls") and tool_call_count < MAX_TOOL_CALLS:
-            tool_call_count += 1
-            llm_messages.append(choice)
 
-            for tc in choice["tool_calls"]:
+        while True:
+            text_buf = ""
+            tool_calls_map: dict[int, dict[str, str]] = {}
+            has_tool_calls = False
+
+            async for chunk in self.llm.stream(llm_messages, tools=tool_defs):
+                choices = chunk.get("choices", [])
+                if not choices:
+                    continue
+                delta = choices[0].get("delta", {})
+
+                # 텍스트 토큰 → 즉시 yield
+                token = delta.get("content", "")
+                if token:
+                    text_buf += token
+                    content += token
+                    yield token
+
+                # 도구 호출 델타 → 누적
+                if delta.get("tool_calls"):
+                    has_tool_calls = True
+                    for tc_delta in delta["tool_calls"]:
+                        idx = tc_delta.get("index", 0)
+                        if idx not in tool_calls_map:
+                            tool_calls_map[idx] = {"id": "", "name": "", "arguments": ""}
+                        if tc_delta.get("id"):
+                            tool_calls_map[idx]["id"] = tc_delta["id"]
+                        func = tc_delta.get("function", {})
+                        if func.get("name"):
+                            tool_calls_map[idx]["name"] = func["name"]
+                        if func.get("arguments"):
+                            tool_calls_map[idx]["arguments"] += func["arguments"]
+
+            # 도구 호출 없음 → 텍스트 스트리밍 완료, 루프 종료
+            if not has_tool_calls or tool_call_count >= MAX_TOOL_CALLS:
+                break
+
+            # 도구 호출 처리
+            tool_call_count += 1
+            tool_calls = [
+                {
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {"name": tc["name"], "arguments": tc["arguments"]},
+                }
+                for tc in tool_calls_map.values()
+            ]
+
+            assistant_msg: dict[str, Any] = {"role": "assistant", "content": text_buf or ""}
+            assistant_msg["tool_calls"] = tool_calls
+            llm_messages.append(assistant_msg)
+
+            for tc in tool_calls:
                 tool_name, tool_id, args = self._parse_tool_call(tc)
                 tool_result = await self._call_tool(tool_name, args)
                 llm_messages.append(
@@ -419,19 +470,9 @@ class ReActAgent:  # [JS-E001.2]
                         else str(tool_result),
                     }
                 )
+                logger.info("tool_executed", tool=tool_name, call_id=tool_id)
 
-            # 도구 응답 후 다시 LLM 호출 — 추가 도구 호출이 없으면 스트리밍으로 전환
-            response = await self.llm.complete(llm_messages, tools=tool_defs)
-            choice = response["choices"][0]["message"]
-
-        # 5. 최종 응답이 도구 호출 없으면 → 스트리밍 재호출
-        if not choice.get("tool_calls"):
-            # 이미 완성된 응답이 있으므로 그것을 스트리밍처럼 yield
-            content = choice.get("content", "")
-            if content:
-                yield content
-
-        # 6. retain_memory (백그라운드) — 어시스턴트 응답 포함
+        # 4. retain_memory (백그라운드) — 어시스턴트 응답 포함
         retain_messages = list(messages)
         if content:
             retain_messages.append({"role": "assistant", "content": content})
