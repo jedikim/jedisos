@@ -24,7 +24,10 @@ COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin/jedisos /usr/local/bin/jedisos
 
 # 데이터 디렉토리 (설정 파일 쓰기용)
-RUN mkdir -p /data/config
+RUN mkdir -p /data/config /data/tools/generated
+
+# 빌트인 스킬 복사 (tools/generated/ → /data/tools/generated/)
+COPY tools/generated/ /data/tools/generated/
 
 # 웹 UI 포트
 EXPOSE 8866
