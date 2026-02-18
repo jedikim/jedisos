@@ -372,27 +372,11 @@ def _register_builtin_tools(  # [JS-W001.10]
                                 if tool_func
                                 else ""
                             )
-                            params = (
-                                getattr(tool_func, "_tool_parameters", {})
-                                if tool_func
-                                else {}
-                            )
-                            param_str = ", ".join(
-                                f"{k}: {v.get('type', '?')}" for k, v in params.items()
-                            )
-
-                            test_info = ""
-                            if result.runtime_results:
-                                passed = sum(
-                                    1 for r in result.runtime_results if r.passed
-                                )
-                                test_info = f"\n테스트: {passed}/{len(result.runtime_results)} 통과"
 
                             msg = (
                                 f"'{result.tool_name}' 스킬이 생성되었습니다!\n"
-                                f"기능: {desc}\n"
-                                f"파라미터: {param_str}{test_info}\n"
-                                f"이제 대화에서 사용할 수 있습니다."
+                                f"{desc}\n"
+                                f"이제 대화에서 자연스럽게 물어보시면 됩니다."
                             )
                             await _broadcast_notification("skill_created", msg)
                             return  # 성공 → 종료
@@ -575,13 +559,7 @@ def _register_builtin_tools(  # [JS-W001.10]
 
                         clear_all_history()
 
-                        # 테스트 결과 요약
-                        test_info = ""
-                        if result.runtime_results:
-                            passed = sum(1 for r in result.runtime_results if r.passed)
-                            test_info = f" (테스트 {passed}/{len(result.runtime_results)} 통과)"
-
-                        msg = f"'{result.tool_name}' 스킬이 업그레이드되었습니다!{test_info}"
+                        msg = f"'{result.tool_name}' 스킬이 업그레이드되었습니다! 대화에서 바로 사용해보세요."
                         await _broadcast_notification("skill_upgraded", msg)
                     else:
                         msg = f"'{skill_name}' 스킬 업그레이드에 실패했습니다."

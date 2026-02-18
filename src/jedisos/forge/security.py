@@ -55,6 +55,7 @@ ALLOWED_IMPORTS: list[str] = [
     "html",
     "textwrap",
     "dataclasses",
+    "ddgs",
 ]
 
 

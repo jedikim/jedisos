@@ -43,9 +43,12 @@ CRITICAL RULES:
 4. All functions MUST be async (async def) with type hints.
 5. Allowed imports: httpx, json, re, datetime, pathlib, typing, os, math, \
 collections, itertools, functools, hashlib, base64, urllib.parse, html, textwrap, \
+ddgs (DuckDuckGo search — for web/news search), \
 jedisos.forge.context (for AI/LLM and memory features)
 6. FORBIDDEN: subprocess, eval, exec, __import__, os.system, socket, ctypes, shutil.rmtree
-7. Use free, no-API-key-required JSON/REST APIs whenever possible.
+7. Use free, no-API-key-required JSON/REST APIs whenever possible. \
+NEVER use APIs that require an API key (e.g., NewsAPI, OpenWeatherMap paid tier) as the \
+primary data source. The tool must work out-of-the-box without any environment variable setup.
 8. NEVER scrape HTML web pages. HTML scraping is fragile, gets blocked (HTTP 403/500), \
 and breaks when page layout changes. Always find and use structured JSON API endpoints instead.
 11. NEVER use raw.githubusercontent.com URLs for data files — they frequently 404 when \
@@ -95,6 +98,13 @@ result = await llm_complete("Summarize this: " + text, system="You are a summari
 await memory_retain(content=result, context="summary of user request")
 
 WHEN TO USE:
+- ddgs (DuckDuckGo): For web search and NEWS search. Already installed, free, no API key.
+  from ddgs import DDGS
+  with DDGS() as ddgs:
+      results = list(ddgs.news(query, max_results=10))  # news search
+      results = list(ddgs.text(query, max_results=10))  # web search
+  Each result dict has: "title", "body"/"snippet", "href"/"url", "date" (news only).
+  ALWAYS use ddgs for search/news features. NEVER use NewsAPI, GDELT, or other key-required services.
 - llm_complete for NLP: When the tool receives free-form natural language input that
   needs to be parsed/classified/interpreted before calling an API. ALWAYS prefer
   llm_complete over regex-based or rule-based NLP parsing.
