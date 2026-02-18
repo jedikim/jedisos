@@ -338,78 +338,76 @@ def _register_builtin_tools(  # [JS-W001.10]
                 generator.generate() 내부에 3회 재시도가 있고,
                 그래도 예외가 발생하면 외부에서 1회 더 재시도합니다.
                 """
-                last_outer_error = ""
-                for outer_attempt in range(1, max_outer_retries + 1):
-                    try:
-                        if outer_attempt > 1:
-                            await _broadcast_notification(
-                                "skill_retry",
-                                f"스킬 생성 재시도 중... (시도 {outer_attempt}/{max_outer_retries})\n"
-                                f"이전 오류: {last_outer_error}",
-                            )
+                try:
+                    last_outer_error = ""
+                    for outer_attempt in range(1, max_outer_retries + 1):
+                        try:
+                            if outer_attempt > 1:
+                                await _broadcast_notification(
+                                    "skill_retry",
+                                    f"스킬 생성 재시도 중... (시도 {outer_attempt}/{max_outer_retries})\n"
+                                    f"이전 오류: {last_outer_error}",
+                                )
 
-                        result = await generator.generate(description)
-                        if result.success:
-                            for tool_func in result.tools:
-                                tname = getattr(tool_func, "_tool_name", "")
-                                if tname:
-                                    skill_registry[tname] = tool_func
-                                    new_def = _skill_func_to_openai_def(tool_func)
-                                    wrapped_tools.append(ToolDef(new_def))
-                                    logger.info("skill_hotloaded", name=tname)
-                            _app_state.pop("_cached_agent", None)
-                            from jedisos.web.api.chat import clear_all_history
+                            result = await generator.generate(description)
+                            if result.success:
+                                for tool_func in result.tools:
+                                    tname = getattr(tool_func, "_tool_name", "")
+                                    if tname:
+                                        skill_registry[tname] = tool_func
+                                        new_def = _skill_func_to_openai_def(tool_func)
+                                        wrapped_tools.append(ToolDef(new_def))
+                                        logger.info("skill_hotloaded", name=tname)
+                                _app_state.pop("_cached_agent", None)
+                                from jedisos.web.api.chat import clear_all_history
 
-                            clear_all_history()
-                            logger.info(
-                                "skill_created_bg",
-                                tool_name=result.tool_name,
-                                tools_count=len(result.tools),
-                            )
-                            tool_func = result.tools[0] if result.tools else None
-                            desc = (
-                                getattr(tool_func, "_tool_description", "")
-                                if tool_func
-                                else ""
-                            )
+                                clear_all_history()
+                                logger.info(
+                                    "skill_created_bg",
+                                    tool_name=result.tool_name,
+                                    tools_count=len(result.tools),
+                                )
+                                tool_func = result.tools[0] if result.tools else None
+                                desc = (
+                                    getattr(tool_func, "_tool_description", "")
+                                    if tool_func
+                                    else ""
+                                )
 
-                            msg = (
-                                f"'{result.tool_name}' 스킬이 생성되었습니다!\n"
-                                f"{desc}\n"
-                                f"이제 대화에서 자연스럽게 물어보시면 됩니다."
-                            )
-                            await _broadcast_notification("skill_created", msg)
-                            return  # 성공 → 종료
-                        else:
-                            last_outer_error = "내부 재시도 3회 모두 실패"
-                            logger.warning(
-                                "skill_creation_failed_bg",
-                                description=description,
+                                msg = (
+                                    f"'{result.tool_name}' 스킬이 생성되었습니다!\n"
+                                    f"{desc}\n"
+                                    f"이제 대화에서 자연스럽게 물어보시면 됩니다."
+                                )
+                                await _broadcast_notification("skill_created", msg)
+                                return  # 성공 → 종료
+                            else:
+                                last_outer_error = "내부 재시도 3회 모두 실패"
+                                logger.warning(
+                                    "skill_creation_failed_bg",
+                                    description=description,
+                                    outer_attempt=outer_attempt,
+                                )
+                                if outer_attempt < max_outer_retries:
+                                    continue  # 외부 재시도
+                                msg = (
+                                    f"'{description}' 스킬 생성에 실패했습니다. "
+                                    f"다른 표현으로 다시 시도해 주세요."
+                                )
+                                await _broadcast_notification("skill_failed", msg)
+                        except Exception as e:
+                            last_outer_error = f"{type(e).__name__}: {e}"
+                            logger.error(
+                                "skill_creation_error_bg",
+                                error=str(e),
                                 outer_attempt=outer_attempt,
                             )
                             if outer_attempt < max_outer_retries:
                                 continue  # 외부 재시도
-                            msg = (
-                                f"'{description}' 스킬 생성에 실패했습니다. "
-                                f"다른 표현으로 다시 시도해 주세요."
-                            )
-                            await _broadcast_notification("skill_failed", msg)
-                    except Exception as e:
-                        last_outer_error = f"{type(e).__name__}: {e}"
-                        logger.error(
-                            "skill_creation_error_bg",
-                            error=str(e),
-                            outer_attempt=outer_attempt,
-                        )
-                        if outer_attempt < max_outer_retries:
-                            continue  # 외부 재시도
-                        msg = f"스킬 생성 중 오류가 발생했습니다: {e}"
-                        await _broadcast_notification("skill_error", msg)
-                    finally:
-                        if outer_attempt >= max_outer_retries:
-                            _app_state["_skill_generating"] = False
-
-                _app_state["_skill_generating"] = False
+                            msg = f"스킬 생성 중 오류가 발생했습니다: {e}"
+                            await _broadcast_notification("skill_error", msg)
+                finally:
+                    _app_state["_skill_generating"] = False
 
             task = asyncio.create_task(_bg_create_skill())
             _background_tasks.add(task)
