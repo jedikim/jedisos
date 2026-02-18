@@ -272,7 +272,7 @@ def _register_builtin_tools(  # [JS-W001.10]
             description = arguments.get("description", "")
 
             async def _bg_create_skill() -> None:
-                """백그라운드에서 스킬을 생성하고 레지스트리에 등록합니다."""
+                """백그라운드에서 스킬을 생성하고 완료/실패를 모든 채널에 알립니다."""
                 try:
                     result = await generator.generate(description)
                     if result.success:
@@ -290,10 +290,16 @@ def _register_builtin_tools(  # [JS-W001.10]
                             tool_name=result.tool_name,
                             tools_count=len(result.tools),
                         )
+                        msg = f"'{result.tool_name}' 스킬이 생성되었습니다! 이제 사용할 수 있습니다."
+                        await _broadcast_notification("skill_created", msg)
                     else:
                         logger.warning("skill_creation_failed_bg", description=description)
+                        msg = f"'{description}' 스킬 생성에 실패했습니다. 다른 표현으로 다시 시도해 주세요."
+                        await _broadcast_notification("skill_failed", msg)
                 except Exception as e:
                     logger.error("skill_creation_error_bg", error=str(e))
+                    msg = f"스킬 생성 중 오류가 발생했습니다: {e}"
+                    await _broadcast_notification("skill_error", msg)
 
             task = asyncio.create_task(_bg_create_skill())
             _background_tasks.add(task)
@@ -351,6 +357,33 @@ def _load_generated_skills(  # [JS-W001.13]
                     logger.info("generated_skill_loaded", name=tool_name, dir=str(skill_dir))
         except Exception as e:
             logger.warning("generated_skill_load_failed", dir=str(skill_dir), error=str(e))
+
+
+async def _broadcast_notification(event: str, message: str) -> None:  # [JS-W001.14]
+    """모든 연결된 채널(WebSocket + 텔레그램 + 디스코드 + 슬랙)에 알림을 전송합니다."""
+    # 1) WebSocket 클라이언트
+    try:
+        import contextlib
+
+        from jedisos.web.api.chat import manager as ws_manager
+
+        payload = {"type": "notification", "event": event, "message": message}
+        for conn in list(ws_manager.active_connections):
+            with contextlib.suppress(Exception):
+                await conn.send_json(payload)
+    except Exception:
+        pass
+
+    # 2) 텔레그램 — 최근 대화한 사용자에게 알림
+    tg_app = _app_state.get("telegram_app")
+    if tg_app and hasattr(tg_app, "bot"):
+        from jedisos.channels.telegram import _telegram_history
+
+        for chat_id in list(_telegram_history.keys()):
+            try:
+                await tg_app.bot.send_message(chat_id=int(chat_id), text=message)
+            except Exception as e:
+                logger.debug("telegram_notify_failed", chat_id=chat_id, error=str(e))
 
 
 async def _stop_channels() -> None:  # [JS-W001.9]

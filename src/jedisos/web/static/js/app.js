@@ -301,6 +301,15 @@ function app() {
                                 });
                             }
                             this.chat.sending = false;
+                        } else if (data.type === 'notification') {
+                            // 백그라운드 작업 완료 알림 (스킬 생성 등)
+                            const isError = data.event === 'skill_failed' || data.event === 'skill_error';
+                            this.showToast(data.message, isError ? 'error' : 'success');
+                            this.chat.messages.push({
+                                role: 'assistant',
+                                content: data.message,
+                                time: this.now(),
+                            });
                         } else if (data.response) {
                             // 레거시 호환 (비스트리밍)
                             this.chat.messages.push({
