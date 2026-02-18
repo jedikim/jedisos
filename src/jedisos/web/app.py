@@ -283,8 +283,10 @@ def _register_builtin_tools(  # [JS-W001.10]
                                 new_def = _skill_func_to_openai_def(tool_func)
                                 wrapped_tools.append(ToolDef(new_def))
                                 logger.info("skill_hotloaded", name=tname)
-                        # 에이전트 캐시 무효화 (새 도구 반영)
+                        # 에이전트 캐시 무효화 + 대화 히스토리 클리어 (새 도구 반영)
                         _app_state.pop("_cached_agent", None)
+                        from jedisos.web.api.chat import clear_all_history
+                        clear_all_history()
                         logger.info(
                             "skill_created_bg",
                             tool_name=result.tool_name,

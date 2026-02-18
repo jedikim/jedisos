@@ -145,6 +145,12 @@ def _add_to_history(bank_id: str, role: str, content: str) -> None:  # [JS-W002.
         history.pop(0)
 
 
+def clear_all_history() -> None:  # [JS-W002.10]
+    """모든 대화 히스토리를 초기화합니다. 스킬 추가/삭제 시 호출."""
+    _conversation_history.clear()
+    logger.info("conversation_history_cleared")
+
+
 def _get_or_create_agent() -> Any:  # [JS-W002.9]
     """캐시된 에이전트를 반환하거나 새로 생성합니다."""
     from jedisos.web.app import get_app_state

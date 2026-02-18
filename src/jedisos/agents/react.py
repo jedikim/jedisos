@@ -212,7 +212,13 @@ class ReActAgent:  # [JS-E001.2]
                     else str(result),
                 }
             )
-            logger.info("tool_executed", tool=tool_name, call_id=tool_id)
+            logger.info(
+                "tool_executed",
+                tool=tool_name,
+                call_id=tool_id,
+                args_keys=list(args.keys()),
+                result_ok=result.get("ok") if isinstance(result, dict) else None,
+            )
 
         return {"messages": tool_results, "tool_call_count": count + 1}
 
