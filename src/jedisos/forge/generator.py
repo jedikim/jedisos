@@ -2,7 +2,7 @@
 [JS-K001] jedisos.forge.generator
 LLM 기반 Skill 코드 생성기 - 멀티 웹 검색 + 페이지 크롤링 + Hindsight 스킬 메모리 + 에러 피드백 루프
 
-version: 1.3.0
+version: 1.4.0
 created: 2026-02-18
 modified: 2026-02-18
 dependencies: jinja2>=3.1, litellm>=1.81, ddgs>=8.0, httpx>=0.28
@@ -45,10 +45,15 @@ CRITICAL RULES:
 collections, itertools, functools, hashlib, base64, urllib.parse, html, textwrap, \
 jedisos.forge.context (for AI/LLM and memory features)
 6. FORBIDDEN: subprocess, eval, exec, __import__, os.system, socket, ctypes, shutil.rmtree
-7. Use free, no-API-key-required APIs whenever possible.
-8. If the user's request implies non-English input (Korean, Japanese, etc.), \
+7. Use free, no-API-key-required JSON/REST APIs whenever possible.
+8. NEVER scrape HTML web pages. HTML scraping is fragile, gets blocked (HTTP 403/500), \
+and breaks when page layout changes. Always find and use structured JSON API endpoints instead.
+9. If the user's request implies non-English input (Korean, Japanese, etc.), \
 make sure the tool handles that language properly. Choose APIs that support \
 the relevant language for geocoding, search, etc.
+10. If the tool accepts free-form natural language input (e.g., "삼성전자 주가 알려줘"), \
+use llm_complete() from jedisos.forge.context to parse/interpret the query into \
+structured parameters. Do NOT use regex or rule-based pattern matching for NLP.
 
 Return ONLY this JSON structure:
 
@@ -63,7 +68,8 @@ Return ONLY this JSON structure:
 CONTEXT FUNCTIONS (from jedisos.forge.context):
 If the tool needs AI/NLP processing or memory storage/recall, import and use these:
 - llm_complete(prompt, system="", temperature=0.7, max_tokens=1024) -> str
-  Use for: summarization, translation, classification, analysis, text generation
+  Use for: summarization, translation, classification, analysis, text generation,
+  AND for parsing/interpreting natural language user queries into structured parameters
 - llm_chat(messages, temperature=0.7, max_tokens=1024) -> str
   Use for: multi-turn conversations, complex reasoning with message history
 - memory_retain(content, context="", bank_id=None) -> dict
@@ -71,14 +77,28 @@ If the tool needs AI/NLP processing or memory storage/recall, import and use the
 - memory_recall(query, bank_id=None) -> dict
   Use for: retrieving previously saved information, finding related context
 
-Example:
+Example (NLP query parsing + API call):
+from jedisos.forge.context import llm_complete
+parsed = await llm_complete(
+    f"Extract the stock name from this query: {query}",
+    system="Extract the company/stock name. Return ONLY the name, nothing else.",
+    temperature=0.0,
+)
+data = await fetch_from_api(parsed.strip())
+
+Example (summarization + memory):
 from jedisos.forge.context import llm_complete, memory_retain
 result = await llm_complete("Summarize this: " + text, system="You are a summarizer")
 await memory_retain(content=result, context="summary of user request")
 
-WHEN TO USE context vs external APIs:
-- Context functions: AI text processing (translate, summarize, classify, generate)
-- External APIs (httpx): live data feeds (weather, stocks, news), web scraping
+WHEN TO USE:
+- llm_complete for NLP: When the tool receives free-form natural language input that
+  needs to be parsed/classified/interpreted before calling an API. ALWAYS prefer
+  llm_complete over regex-based or rule-based NLP parsing.
+- External APIs (httpx): For fetching live data. ALWAYS prefer JSON/REST APIs over
+  HTML page scraping. HTML scraping is fragile and breaks frequently (HTTP 500, layout changes).
+- NEVER scrape HTML pages when a JSON API endpoint is available.
+- NEVER use regex patterns to parse natural language queries — use llm_complete instead.
 
 IMPORTANT:
 - "code" must be a COMPLETE, valid Python file. Do NOT use template placeholders.

@@ -9,6 +9,22 @@
  */
 
 /**
+ * 마크다운을 HTML로 변환합니다. [JS-W010.2]
+ * marked.js CDN이 로드되지 않았으면 plain text 반환.
+ */
+function renderMarkdown(text) {
+    if (!text) return '';
+    if (typeof marked !== 'undefined' && marked.parse) {
+        try {
+            return marked.parse(text, { breaks: true });
+        } catch (e) {
+            return text;
+        }
+    }
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
  * 메인 Alpine.js 앱 함수.  [JS-W010.1]
  *
  * @returns {Object} Alpine.js 컴포넌트 데이터 및 메서드

@@ -2,7 +2,7 @@
 [JS-F001] jedisos.channels.telegram
 텔레그램 봇 채널 어댑터 - python-telegram-bot>=22.6 기반
 
-version: 1.0.0
+version: 1.1.0
 created: 2026-02-18
 modified: 2026-02-18
 dependencies: python-telegram-bot>=22.6
@@ -10,6 +10,7 @@ dependencies: python-telegram-bot>=22.6
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
@@ -38,6 +39,31 @@ logger = structlog.get_logger()
 # 사용자별 대화 히스토리 (최근 20턴)
 _MAX_HISTORY = 20
 _telegram_history: dict[str, list[dict[str, str]]] = defaultdict(list)
+
+
+def _md_to_telegram_html(text: str) -> str:  # [JS-F001.10]
+    """마크다운 텍스트를 텔레그램 HTML로 변환합니다.
+
+    **bold** → <b>bold</b>, *italic* → <i>italic</i>,
+    `code` → <code>code</code>, ```block``` → <pre>block</pre>
+
+    Args:
+        text: 마크다운 텍스트
+
+    Returns:
+        텔레그램 HTML 포맷 문자열
+    """
+    # HTML 특수문자 이스케이프 먼저
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    # 코드 블록 (```...```)
+    text = re.sub(r"```(?:\w*\n)?(.*?)```", r"<pre>\1</pre>", text, flags=re.DOTALL)
+    # 인라인 코드 (`...`)
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    # 볼드 (**...**)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    # 이탤릭 (*...*)
+    text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<i>\1</i>", text)
+    return text
 
 
 class TelegramChannel:  # [JS-F001.1]
@@ -147,7 +173,7 @@ class TelegramChannel:  # [JS-F001.1]
             history.append({"role": "assistant", "content": response})
             while len(history) > _MAX_HISTORY * 2:
                 history.pop(0)
-            await update.message.reply_text(response)
+            await update.message.reply_text(_md_to_telegram_html(response), parse_mode="HTML")
         except ChannelError as e:
             logger.error("telegram_processing_failed", user_id=user_id, error=str(e))
             await update.message.reply_text("죄송합니다, 처리 중 오류가 발생했습니다.")

@@ -29,6 +29,83 @@
 }
 
 /* ──────────────────────────────
+   마크다운 렌더링 (채팅 메시지 내)
+   ────────────────────────────── */
+
+.chat-message-assistant .prose {
+    line-height: 1.6;
+}
+
+.chat-message-assistant .prose p {
+    margin: 0.25em 0;
+}
+
+.chat-message-assistant .prose strong {
+    font-weight: 700;
+}
+
+.chat-message-assistant .prose em {
+    font-style: italic;
+}
+
+.chat-message-assistant .prose code {
+    background-color: #f3f4f6;
+    padding: 0.15em 0.35em;
+    border-radius: 0.25rem;
+    font-size: 0.85em;
+    font-family: 'Menlo', 'Consolas', monospace;
+}
+
+.chat-message-assistant .prose pre {
+    background-color: #1f2937;
+    color: #e5e7eb;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+
+.chat-message-assistant .prose pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+}
+
+.chat-message-assistant .prose ul,
+.chat-message-assistant .prose ol {
+    padding-left: 1.25em;
+    margin: 0.25em 0;
+}
+
+.chat-message-assistant .prose li {
+    margin: 0.15em 0;
+}
+
+.chat-message-assistant .prose h1,
+.chat-message-assistant .prose h2,
+.chat-message-assistant .prose h3 {
+    font-weight: 600;
+    margin: 0.5em 0 0.25em;
+}
+
+.chat-message-assistant .prose a {
+    color: #4f46e5;
+    text-decoration: underline;
+}
+
+.chat-message-assistant .prose blockquote {
+    border-left: 3px solid #d1d5db;
+    padding-left: 0.75em;
+    margin: 0.5em 0;
+    color: #6b7280;
+}
+
+/* 유저 메시지 내 마크다운 (볼드 등) */
+.chat-message-user .prose strong {
+    font-weight: 700;
+}
+
+/* ──────────────────────────────
    WebSocket 상태 인디케이터
    ────────────────────────────── */
 

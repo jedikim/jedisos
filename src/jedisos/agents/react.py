@@ -2,9 +2,9 @@
 [JS-E001] jedisos.agents.react
 LangGraph 기반 ReAct 에이전트
 
-version: 1.0.0
+version: 1.1.0
 created: 2026-02-16
-modified: 2026-02-17
+modified: 2026-02-18
 dependencies: langgraph>=1.0.8, litellm>=1.81.12
 """
 
@@ -410,13 +410,15 @@ class ReActAgent:  # [JS-E001.2]
             for tc in choice["tool_calls"]:
                 tool_name, tool_id, args = self._parse_tool_call(tc)
                 tool_result = await self._call_tool(tool_name, args)
-                llm_messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_id,
-                    "content": json.dumps(tool_result, ensure_ascii=False)
-                    if isinstance(tool_result, dict)
-                    else str(tool_result),
-                })
+                llm_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_id,
+                        "content": json.dumps(tool_result, ensure_ascii=False)
+                        if isinstance(tool_result, dict)
+                        else str(tool_result),
+                    }
+                )
 
             # 도구 응답 후 다시 LLM 호출 — 추가 도구 호출이 없으면 스트리밍으로 전환
             response = await self.llm.complete(llm_messages, tools=tool_defs)
@@ -429,10 +431,12 @@ class ReActAgent:  # [JS-E001.2]
             if content:
                 yield content
 
-        # 6. retain_memory (백그라운드)
+        # 6. retain_memory (백그라운드) — 어시스턴트 응답 포함
+        retain_messages = list(messages)
+        if content:
+            retain_messages.append({"role": "assistant", "content": content})
         full_conversation = "\n".join(
-            f"{msg.get('role', 'unknown')}: {msg.get('content', '')}"
-            for msg in messages
+            f"{msg.get('role', 'unknown')}: {msg.get('content', '')}" for msg in retain_messages
         )
 
         async def _bg_retain() -> None:

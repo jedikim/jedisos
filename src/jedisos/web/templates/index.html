@@ -33,6 +33,9 @@ modified: 2026-02-18
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/css/app.css">
 
+    <!-- Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+
     <!-- Alpine.js -->
     <script src="/static/js/app.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js" defer></script>
@@ -384,7 +387,8 @@ modified: 2026-02-18
                              class="max-w-[80%] sm:max-w-[70%]">
                             <div class="text-xs font-medium mb-1 opacity-70"
                                  x-text="msg.role === 'user' ? '나' : 'JediSOS'"></div>
-                            <div class="text-sm leading-relaxed whitespace-pre-wrap" x-text="msg.content"></div>
+                            <div class="text-sm leading-relaxed prose prose-sm max-w-none"
+                                 x-html="msg.role === 'user' ? msg.content : renderMarkdown(msg.content)"></div>
                             <div class="text-xs opacity-50 mt-1 text-right" x-text="msg.time"></div>
                         </div>
                     </div>
@@ -407,7 +411,7 @@ modified: 2026-02-18
                 <div class="flex items-end gap-3 max-w-4xl mx-auto">
                     <div class="flex-1 relative">
                         <textarea x-model="chat.input"
-                                  @keydown.enter.prevent="if (!$event.shiftKey) sendMessage()"
+                                  @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); sendMessage() }"
                                   placeholder="메시지를 입력하세요... (Shift+Enter로 줄바꿈)"
                                   rows="1"
                                   class="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm resize-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"

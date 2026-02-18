@@ -626,11 +626,15 @@ async def _broadcast_notification(event: str, message: str) -> None:  # [JS-W001
     # 2) 텔레그램 — 최근 대화한 사용자에게 알림
     tg_app = _app_state.get("telegram_app")
     if tg_app and hasattr(tg_app, "bot"):
-        from jedisos.channels.telegram import _telegram_history
+        from jedisos.channels.telegram import _md_to_telegram_html, _telegram_history
 
         for chat_id in list(_telegram_history.keys()):
             try:
-                await tg_app.bot.send_message(chat_id=int(chat_id), text=message)
+                await tg_app.bot.send_message(
+                    chat_id=int(chat_id),
+                    text=_md_to_telegram_html(message),
+                    parse_mode="HTML",
+                )
             except Exception as e:
                 logger.debug("telegram_notify_failed", chat_id=chat_id, error=str(e))
 
