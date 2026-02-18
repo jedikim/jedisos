@@ -21,6 +21,7 @@ import jinja2
 import structlog
 import yaml
 
+from jedisos.forge.context import SKILL_MEMORY_BANK
 from jedisos.forge.loader import ToolLoader
 from jedisos.forge.security import CodeSecurityChecker, SecurityResult
 from jedisos.forge.tester import SkillTester
@@ -30,8 +31,6 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
-# 스킬 메모리 전용 뱅크 ID
-SKILL_MEMORY_BANK = "jedisos_skills"
 
 # LLM에게 보낼 코드 생성 프롬프트  [JS-K001.2]
 CODE_GEN_PROMPT = """\
@@ -43,7 +42,8 @@ CRITICAL RULES:
 3. Decorate each tool function with: @tool(name="...", description="...")
 4. All functions MUST be async (async def) with type hints.
 5. Allowed imports: httpx, json, re, datetime, pathlib, typing, os, math, \
-collections, itertools, functools, hashlib, base64, urllib.parse, html, textwrap
+collections, itertools, functools, hashlib, base64, urllib.parse, html, textwrap, \
+jedisos.forge.context (for AI/LLM and memory features)
 6. FORBIDDEN: subprocess, eval, exec, __import__, os.system, socket, ctypes, shutil.rmtree
 7. Use free, no-API-key-required APIs whenever possible.
 8. If the user's request implies non-English input (Korean, Japanese, etc.), \
@@ -59,6 +59,26 @@ Return ONLY this JSON structure:
     "env_required": [],
     "code": "from jedisos.forge.decorator import tool\\nimport httpx\\n\\n@tool(name=\\"my_tool\\", description=\\"Does something\\")\\nasync def my_tool(param: str) -> dict:\\n    return {{\\"result\\": param}}"
 }}
+
+CONTEXT FUNCTIONS (from jedisos.forge.context):
+If the tool needs AI/NLP processing or memory storage/recall, import and use these:
+- llm_complete(prompt, system="", temperature=0.7, max_tokens=1024) -> str
+  Use for: summarization, translation, classification, analysis, text generation
+- llm_chat(messages, temperature=0.7, max_tokens=1024) -> str
+  Use for: multi-turn conversations, complex reasoning with message history
+- memory_retain(content, context="", bank_id=None) -> dict
+  Use for: saving results, user preferences, learned information to memory
+- memory_recall(query, bank_id=None) -> dict
+  Use for: retrieving previously saved information, finding related context
+
+Example:
+from jedisos.forge.context import llm_complete, memory_retain
+result = await llm_complete("Summarize this: " + text, system="You are a summarizer")
+await memory_retain(content=result, context="summary of user request")
+
+WHEN TO USE context vs external APIs:
+- Context functions: AI text processing (translate, summarize, classify, generate)
+- External APIs (httpx): live data feeds (weather, stocks, news), web scraping
 
 IMPORTANT:
 - "code" must be a COMPLETE, valid Python file. Do NOT use template placeholders.
@@ -214,14 +234,11 @@ class SkillGenerator:  # [JS-K001.3]
                         tool_description=spec.get("description", ""),
                         parameters=getattr(tools[0], "_tool_parameters", {}),
                     )
-                    runtime_results = await self.tester.run_runtime_tests(
-                        tools[0], test_cases
-                    )
+                    runtime_results = await self.tester.run_runtime_tests(tools[0], test_cases)
                     failed = [r for r in runtime_results if not r.passed]
                     if failed:
                         error_details = "; ".join(
-                            f"Test '{r.test_case.description}': {r.error}"
-                            for r in failed
+                            f"Test '{r.test_case.description}': {r.error}" for r in failed
                         )
                         last_error = (
                             f"런타임 테스트 실패 ({len(failed)}/{len(runtime_results)}): "

@@ -43,6 +43,7 @@ ALLOWED_IMPORTS: list[str] = [
     "typing",
     "pydantic",
     "jedisos.forge.decorator",
+    "jedisos.forge.context",
     "os",
     "math",
     "collections",

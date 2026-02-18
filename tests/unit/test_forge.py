@@ -1,8 +1,8 @@
 """
 [JS-T012] tests.unit.test_forge
-Forge 자가 코딩 엔진 단위 테스트 - decorator, security, generator, tester, runtime
+Forge 자가 코딩 엔진 단위 테스트 - decorator, security, generator, tester, runtime, context
 
-version: 1.1.0
+version: 1.2.0
 created: 2026-02-18
 modified: 2026-02-18
 """
@@ -10,6 +10,7 @@ modified: 2026-02-18
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from jedisos.forge import context as skill_context
 from jedisos.forge.decorator import tool
 from jedisos.forge.generator import SKILL_MEMORY_BANK, SkillGenerator
 from jedisos.forge.security import (
@@ -712,7 +713,9 @@ class TestRuntimeTesting:  # [JS-T012.5]
         """LLM 실패 시 기본값 폴백."""
         tester = SkillTester()
 
-        with patch("litellm.acompletion", new_callable=AsyncMock, side_effect=Exception("LLM down")):
+        with patch(
+            "litellm.acompletion", new_callable=AsyncMock, side_effect=Exception("LLM down")
+        ):
             cases = await tester.generate_test_cases(
                 tool_name="calc",
                 tool_description="계산기",
@@ -738,3 +741,133 @@ class TestRuntimeTesting:  # [JS-T012.5]
         result = await tester.test_skill(tool_dir)
         assert hasattr(result, "runtime_results")
         assert isinstance(result.runtime_results, list)
+
+
+class TestSkillContext:  # [JS-T012.6]
+    """스킬 공유 컨텍스트 (LLM + 메모리) 테스트."""
+
+    def _reset_context(self):
+        """테스트 후 컨텍스트를 초기 상태로 복원."""
+        skill_context._llm_router = None
+        skill_context._memory = None
+
+    def test_context_initialize(self):
+        """initialize() 호출 후 is_initialized() True."""
+        self._reset_context()
+        mock_llm = MagicMock()
+        mock_memory = MagicMock()
+
+        skill_context.initialize(llm_router=mock_llm, memory=mock_memory)
+        assert skill_context.is_initialized() is True
+        self._reset_context()
+
+    async def test_context_not_initialized_llm(self):
+        """미초기화 상태에서 llm_complete() 호출 시 RuntimeError."""
+        self._reset_context()
+        try:
+            await skill_context.llm_complete("test")
+            raise AssertionError("RuntimeError가 발생해야 합니다")
+        except RuntimeError as e:
+            assert "llm_router" in str(e)
+
+    async def test_context_not_initialized_memory(self):
+        """미초기화 상태에서 memory_retain() 호출 시 RuntimeError."""
+        self._reset_context()
+        try:
+            await skill_context.memory_retain("test")
+            raise AssertionError("RuntimeError가 발생해야 합니다")
+        except RuntimeError as e:
+            assert "memory" in str(e)
+
+    async def test_llm_complete_delegates(self):
+        """llm_complete()가 LLMRouter.complete_text()에 위임."""
+        self._reset_context()
+        mock_llm = AsyncMock()
+        mock_llm.complete_text.return_value = "요약 결과입니다"
+        skill_context._llm_router = mock_llm
+
+        result = await skill_context.llm_complete("요약해줘", system="요약기")
+        assert result == "요약 결과입니다"
+        mock_llm.complete_text.assert_called_once_with(
+            prompt="요약해줘",
+            system="요약기",
+            temperature=0.7,
+            max_tokens=1024,
+        )
+        self._reset_context()
+
+    async def test_llm_complete_caps_tokens(self):
+        """max_tokens > 2048이면 2048로 캡."""
+        self._reset_context()
+        mock_llm = AsyncMock()
+        mock_llm.complete_text.return_value = "ok"
+        skill_context._llm_router = mock_llm
+
+        await skill_context.llm_complete("test", max_tokens=5000)
+        call_kwargs = mock_llm.complete_text.call_args.kwargs
+        assert call_kwargs["max_tokens"] == 2048
+        self._reset_context()
+
+    async def test_llm_complete_clamps_temperature(self):
+        """temperature가 범위 밖이면 클램핑."""
+        self._reset_context()
+        mock_llm = AsyncMock()
+        mock_llm.complete_text.return_value = "ok"
+        skill_context._llm_router = mock_llm
+
+        # 음수 → 0.0
+        await skill_context.llm_complete("test", temperature=-1.0)
+        assert mock_llm.complete_text.call_args.kwargs["temperature"] == 0.0
+
+        # 초과 → 1.5
+        await skill_context.llm_complete("test", temperature=3.0)
+        assert mock_llm.complete_text.call_args.kwargs["temperature"] == 1.5
+        self._reset_context()
+
+    async def test_llm_chat_delegates(self):
+        """llm_chat()가 LLMRouter.complete()에 위임하고 텍스트 추출."""
+        self._reset_context()
+        mock_llm = AsyncMock()
+        mock_llm.complete.return_value = {"choices": [{"message": {"content": "채팅 응답"}}]}
+        skill_context._llm_router = mock_llm
+
+        messages = [{"role": "user", "content": "안녕"}]
+        result = await skill_context.llm_chat(messages)
+        assert result == "채팅 응답"
+        mock_llm.complete.assert_called_once()
+        self._reset_context()
+
+    async def test_memory_retain_delegates(self):
+        """memory_retain()이 HindsightMemory.retain()에 위임."""
+        self._reset_context()
+        mock_memory = AsyncMock()
+        mock_memory.retain.return_value = {"status": "ok"}
+        skill_context._memory = mock_memory
+
+        result = await skill_context.memory_retain(content="중요한 정보", context="테스트")
+        assert result == {"status": "ok"}
+        mock_memory.retain.assert_called_once_with(
+            content="중요한 정보",
+            context="테스트",
+            bank_id="jedisos-skills",
+        )
+        self._reset_context()
+
+    async def test_memory_recall_default_bank(self):
+        """bank_id 미지정 시 'jedisos-skills' 사용."""
+        self._reset_context()
+        mock_memory = AsyncMock()
+        mock_memory.recall.return_value = {"context": "검색 결과"}
+        skill_context._memory = mock_memory
+
+        result = await skill_context.memory_recall(query="테스트")
+        mock_memory.recall.assert_called_once_with(
+            query="테스트",
+            bank_id="jedisos-skills",
+        )
+        assert result == {"context": "검색 결과"}
+        self._reset_context()
+
+    def test_context_in_allowed_imports(self):
+        """ALLOWED_IMPORTS에 jedisos.forge.context 포함."""
+        assert "jedisos.forge.context" in ALLOWED_IMPORTS

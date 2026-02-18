@@ -208,7 +208,10 @@ def _register_builtin_tools(  # [JS-W001.10]
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "검색할 내용 (예: '사용자 이름', '좋아하는 음식')"},
+                        "query": {
+                            "type": "string",
+                            "description": "검색할 내용 (예: '사용자 이름', '좋아하는 음식')",
+                        },
                     },
                     "required": ["query"],
                 },
@@ -236,7 +239,10 @@ def _register_builtin_tools(  # [JS-W001.10]
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "description": {"type": "string", "description": "만들 도구에 대한 설명 (예: '현재 날씨를 조회하는 도구')"},
+                        "description": {
+                            "type": "string",
+                            "description": "만들 도구에 대한 설명 (예: '현재 날씨를 조회하는 도구')",
+                        },
                     },
                     "required": ["description"],
                 },
@@ -276,7 +282,10 @@ def _register_builtin_tools(  # [JS-W001.10]
                     "type": "object",
                     "properties": {
                         "name": {"type": "string", "description": "개선할 스킬 이름"},
-                        "instructions": {"type": "string", "description": "개선/수정 지시사항 (예: '에러 처리 추가', '응답 형식 변경')"},
+                        "instructions": {
+                            "type": "string",
+                            "description": "개선/수정 지시사항 (예: '에러 처리 추가', '응답 형식 변경')",
+                        },
                     },
                     "required": ["name", "instructions"],
                 },
@@ -336,6 +345,7 @@ def _register_builtin_tools(  # [JS-W001.10]
                         # 에이전트 캐시 무효화 + 대화 히스토리 클리어 (새 도구 반영)
                         _app_state.pop("_cached_agent", None)
                         from jedisos.web.api.chat import clear_all_history
+
                         clear_all_history()
                         logger.info(
                             "skill_created_bg",
@@ -346,7 +356,9 @@ def _register_builtin_tools(  # [JS-W001.10]
                         tool_func = result.tools[0] if result.tools else None
                         desc = getattr(tool_func, "_tool_description", "") if tool_func else ""
                         params = getattr(tool_func, "_tool_parameters", {}) if tool_func else {}
-                        param_str = ", ".join(f"{k}: {v.get('type', '?')}" for k, v in params.items())
+                        param_str = ", ".join(
+                            f"{k}: {v.get('type', '?')}" for k, v in params.items()
+                        )
 
                         # 런타임 테스트 결과
                         test_info = ""
@@ -440,7 +452,8 @@ def _register_builtin_tools(  # [JS-W001.10]
             # 레지스트리에서 제거
             skill_registry.pop(skill_name, None)
             wrapped_tools[:] = [
-                t for t in wrapped_tools
+                t
+                for t in wrapped_tools
                 if t.to_dict().get("function", {}).get("name") != skill_name
             ]
 
@@ -450,9 +463,7 @@ def _register_builtin_tools(  # [JS-W001.10]
 
             # Hindsight에 삭제 기록
             try:
-                await generator.retain_skill_deletion(
-                    tool_name=skill_name, description=description
-                )
+                await generator.retain_skill_deletion(tool_name=skill_name, description=description)
             except Exception as e:
                 logger.warning("skill_deletion_record_failed", error=str(e))
 
@@ -509,7 +520,8 @@ def _register_builtin_tools(  # [JS-W001.10]
                                 new_def = _skill_func_to_openai_def(tool_func)
                                 # 기존 정의 교체
                                 wrapped_tools[:] = [
-                                    t for t in wrapped_tools
+                                    t
+                                    for t in wrapped_tools
                                     if t.to_dict().get("function", {}).get("name") != tname
                                 ]
                                 wrapped_tools.append(ToolDef(new_def))
@@ -517,6 +529,7 @@ def _register_builtin_tools(  # [JS-W001.10]
 
                         _app_state.pop("_cached_agent", None)
                         from jedisos.web.api.chat import clear_all_history
+
                         clear_all_history()
 
                         # 테스트 결과 요약
@@ -665,6 +678,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # [JS-W001.1]
     llm = LLMRouter(LLMConfig())
     pdp = PolicyDecisionPoint(SecurityConfig())
     audit = AuditLogger()
+
+    # 스킬 공유 컨텍스트 초기화 (LLM + 메모리를 스킬에서 사용 가능하게)
+    from jedisos.forge.context import initialize as init_skill_context
+
+    init_skill_context(llm_router=llm, memory=memory)
 
     _app_state["config"] = config
     _app_state["memory"] = memory
