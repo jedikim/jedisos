@@ -405,27 +405,17 @@ class SkillTester:  # [JS-K002.2]
 
                 elapsed = time.monotonic() - start
 
-                # 함수가 정상 반환하면 PASS (dict에 ok: False여도 유효한 응답)
-                if tc.expect_error:
-                    # 에러를 예상했지만 정상 반환됨 — 여전히 PASS로 처리
-                    # (함수가 내부적으로 에러를 처리한 경우)
-                    results.append(
-                        RuntimeTestResult(
-                            test_case=tc,
-                            passed=True,
-                            output=output,
-                            elapsed_seconds=elapsed,
-                        )
+                # 함수가 정상 반환하면 항상 PASS
+                # (expect_error=True여도 함수가 내부적으로 에러를 처리한 경우 유효)
+                # (dict에 ok: False여도 유효한 응답)
+                results.append(
+                    RuntimeTestResult(
+                        test_case=tc,
+                        passed=True,
+                        output=output,
+                        elapsed_seconds=elapsed,
                     )
-                else:
-                    results.append(
-                        RuntimeTestResult(
-                            test_case=tc,
-                            passed=True,
-                            output=output,
-                            elapsed_seconds=elapsed,
-                        )
-                    )
+                )
 
             except TimeoutError:
                 elapsed = time.monotonic() - start

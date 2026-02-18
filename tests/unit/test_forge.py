@@ -1,11 +1,13 @@
 """
 [JS-T012] tests.unit.test_forge
-Forge 자가 코딩 엔진 단위 테스트 - decorator, security, generator, tester
+Forge 자가 코딩 엔진 단위 테스트 - decorator, security, generator, tester, runtime
 
-version: 1.0.0
+version: 1.1.0
 created: 2026-02-18
+modified: 2026-02-18
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from jedisos.forge.decorator import tool
@@ -15,7 +17,7 @@ from jedisos.forge.security import (
     FORBIDDEN_PATTERNS,
     CodeSecurityChecker,
 )
-from jedisos.forge.tester import SkillTester
+from jedisos.forge.tester import RuntimeTestCase, SkillTester
 
 
 class TestToolDecorator:  # [JS-T012.1]
@@ -561,3 +563,178 @@ async def t(x: int) -> int:
         tester = SkillTester()
         result = await tester.test_code("def bad(:\n  pass", "bad")
         assert result.passed is False
+
+
+class TestRuntimeTesting:  # [JS-T012.5]
+    """런타임 테스트 기능 테스트."""
+
+    async def test_run_runtime_tests_success(self):
+        """정상 함수 실행 시 모든 테스트 통과."""
+
+        @tool(name="add", description="더하기")
+        async def add(a: int, b: int) -> int:
+            return a + b
+
+        tester = SkillTester()
+        test_cases = [
+            RuntimeTestCase(description="정상 덧셈", kwargs={"a": 1, "b": 2}),
+            RuntimeTestCase(description="0 더하기", kwargs={"a": 0, "b": 0}),
+            RuntimeTestCase(description="음수", kwargs={"a": -1, "b": 5}),
+        ]
+
+        results = await tester.run_runtime_tests(add, test_cases)
+        assert len(results) == 3
+        assert all(r.passed for r in results)
+        assert results[0].output == 3
+        assert results[1].output == 0
+        assert results[2].output == 4
+        assert all(r.elapsed_seconds >= 0 for r in results)
+
+    async def test_run_runtime_tests_exception(self):
+        """함수가 예외를 발생시키면 실패."""
+
+        @tool(name="fail", description="실패")
+        async def fail(x: str) -> dict:
+            raise ValueError(f"잘못된 값: {x}")
+
+        tester = SkillTester()
+        test_cases = [
+            RuntimeTestCase(description="예외 발생", kwargs={"x": "bad"}),
+        ]
+
+        results = await tester.run_runtime_tests(fail, test_cases)
+        assert len(results) == 1
+        assert results[0].passed is False
+        assert "잘못된 값" in results[0].error
+
+    async def test_run_runtime_tests_expected_error(self):
+        """expect_error=True인 경우 예외 발생이 정상."""
+
+        @tool(name="validate", description="검증")
+        async def validate(x: str) -> dict:
+            if not x:
+                raise ValueError("빈 값")
+            return {"ok": True}
+
+        tester = SkillTester()
+        test_cases = [
+            RuntimeTestCase(
+                description="빈 문자열 에러 기대",
+                kwargs={"x": ""},
+                expect_error=True,
+            ),
+        ]
+
+        results = await tester.run_runtime_tests(validate, test_cases)
+        assert len(results) == 1
+        assert results[0].passed is True
+
+    async def test_run_runtime_tests_timeout(self):
+        """타임아웃 초과 시 실패."""
+
+        @tool(name="slow", description="느린 함수")
+        async def slow(x: str) -> str:
+            await asyncio.sleep(10)
+            return x
+
+        tester = SkillTester()
+        test_cases = [
+            RuntimeTestCase(
+                description="타임아웃 테스트",
+                kwargs={"x": "test"},
+                timeout_seconds=0.1,  # 0.1초 타임아웃
+            ),
+        ]
+
+        results = await tester.run_runtime_tests(slow, test_cases)
+        assert len(results) == 1
+        assert results[0].passed is False
+        assert "타임아웃" in results[0].error or "timeout" in results[0].error.lower()
+
+    async def test_run_runtime_tests_sync_function(self):
+        """동기 함수도 정상 실행."""
+
+        @tool(name="sync_double", description="동기 2배")
+        def sync_double(x: int) -> int:
+            return x * 2
+
+        tester = SkillTester()
+        test_cases = [
+            RuntimeTestCase(description="동기 실행", kwargs={"x": 5}),
+        ]
+
+        results = await tester.run_runtime_tests(sync_double, test_cases)
+        assert len(results) == 1
+        assert results[0].passed is True
+        assert results[0].output == 10
+
+    async def test_run_runtime_tests_dict_ok_false(self):
+        """ok=False 반환은 실패가 아님 (정상 에러 응답)."""
+
+        @tool(name="search", description="검색")
+        async def search(query: str) -> dict:
+            return {"ok": False, "error": "결과 없음"}
+
+        tester = SkillTester()
+        test_cases = [
+            RuntimeTestCase(description="결과 없음", kwargs={"query": "xxx"}),
+        ]
+
+        results = await tester.run_runtime_tests(search, test_cases)
+        assert len(results) == 1
+        assert results[0].passed is True  # ok=False여도 통과
+
+    async def test_generate_test_cases_with_mock_llm(self):
+        """LLM mock으로 테스트 케이스 생성 확인."""
+        tester = SkillTester()
+
+        mock_response = MagicMock()
+        mock_response.choices = [
+            MagicMock(
+                message=MagicMock(
+                    content='[{"description": "정상 입력", "kwargs": {"query": "삼성전자"}, "expect_error": false}]'
+                )
+            )
+        ]
+
+        with patch("litellm.acompletion", new_callable=AsyncMock, return_value=mock_response):
+            cases = await tester.generate_test_cases(
+                tool_name="stock",
+                tool_description="주식 조회",
+                parameters={"query": {"type": "string", "required": True}},
+            )
+
+        assert len(cases) >= 1
+        assert cases[0].description == "정상 입력"
+        assert cases[0].kwargs == {"query": "삼성전자"}
+
+    async def test_generate_test_cases_fallback(self):
+        """LLM 실패 시 기본값 폴백."""
+        tester = SkillTester()
+
+        with patch("litellm.acompletion", new_callable=AsyncMock, side_effect=Exception("LLM down")):
+            cases = await tester.generate_test_cases(
+                tool_name="calc",
+                tool_description="계산기",
+                parameters={"x": {"type": "integer", "required": True}},
+            )
+
+        assert len(cases) >= 1
+        assert "x" in cases[0].kwargs
+
+    async def test_test_result_has_runtime_results(self, tmp_path):
+        """TestResult에 runtime_results 필드 존재."""
+        tool_dir = tmp_path / "calc"
+        tool_dir.mkdir()
+        (tool_dir / "tool.yaml").write_text('name: calc\nversion: "1.0.0"\ndescription: "계산기"\n')
+        (tool_dir / "tool.py").write_text(
+            "from jedisos.forge.decorator import tool\n\n"
+            '@tool(name="add", description="더하기")\n'
+            "async def add(a: int, b: int) -> int:\n"
+            "    return a + b\n"
+        )
+
+        tester = SkillTester()
+        result = await tester.test_skill(tool_dir)
+        assert hasattr(result, "runtime_results")
+        assert isinstance(result.runtime_results, list)

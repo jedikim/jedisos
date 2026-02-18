@@ -2,7 +2,7 @@
 [JS-K001] jedisos.forge.generator
 LLM 기반 Skill 코드 생성기 - 멀티 웹 검색 + 페이지 크롤링 + Hindsight 스킬 메모리 + 에러 피드백 루프
 
-version: 1.2.0
+version: 1.3.0
 created: 2026-02-18
 modified: 2026-02-18
 dependencies: jinja2>=3.1, litellm>=1.81, ddgs>=8.0, httpx>=0.28
@@ -23,6 +23,7 @@ import yaml
 
 from jedisos.forge.loader import ToolLoader
 from jedisos.forge.security import CodeSecurityChecker, SecurityResult
+from jedisos.forge.tester import SkillTester
 
 if TYPE_CHECKING:
     from jedisos.memory.hindsight import HindsightMemory
@@ -109,6 +110,7 @@ class SkillGenerator:  # [JS-K001.3]
         self.max_retries = max_retries
         self.security_checker = CodeSecurityChecker()
         self.tool_loader = ToolLoader()
+        self.tester = SkillTester()
         self.memory = memory
 
         # Jinja2 환경 설정
@@ -193,7 +195,7 @@ class SkillGenerator:  # [JS-K001.3]
             # 5. 핫로드 테스트
             try:
                 tools = self.tool_loader.load_tool(tool_dir)
-            except (ImportError, FileNotFoundError, Exception) as e:
+            except Exception as e:  # ImportError, FileNotFoundError, or unexpected
                 last_error = f"핫로드 실패 ({type(e).__name__}): {e}"
                 logger.error(
                     "skill_generation_load_failed",
@@ -202,6 +204,44 @@ class SkillGenerator:  # [JS-K001.3]
                     error=str(e),
                 )
                 continue
+
+            # 5.5. 런타임 테스트 (실제 함수 호출)
+            runtime_results = []
+            if tools:
+                try:
+                    test_cases = await self.tester.generate_test_cases(
+                        tool_name=tool_name,
+                        tool_description=spec.get("description", ""),
+                        parameters=getattr(tools[0], "_tool_parameters", {}),
+                    )
+                    runtime_results = await self.tester.run_runtime_tests(
+                        tools[0], test_cases
+                    )
+                    failed = [r for r in runtime_results if not r.passed]
+                    if failed:
+                        error_details = "; ".join(
+                            f"Test '{r.test_case.description}': {r.error}"
+                            for r in failed
+                        )
+                        last_error = (
+                            f"런타임 테스트 실패 ({len(failed)}/{len(runtime_results)}): "
+                            f"{error_details}"
+                        )
+                        logger.warning(
+                            "skill_generation_runtime_test_failed",
+                            tool_name=tool_name,
+                            attempt=attempt,
+                            failed_count=len(failed),
+                            total_count=len(runtime_results),
+                        )
+                        continue  # retry with error feedback
+                except Exception as e:
+                    logger.warning(
+                        "skill_runtime_test_error",
+                        tool_name=tool_name,
+                        error=str(e),
+                    )
+                    # Don't fail on test infrastructure error, proceed
 
             logger.info(
                 "skill_generation_success",
@@ -225,6 +265,7 @@ class SkillGenerator:  # [JS-K001.3]
                 code=code,
                 yaml_content=yaml_content,
                 security_result=security_result,
+                runtime_results=runtime_results,
             )
 
         return GenerationResult(
@@ -705,6 +746,7 @@ class GenerationResult:  # [JS-K001.8]
         code: str,
         yaml_content: str,
         security_result: SecurityResult,
+        runtime_results: list[Any] | None = None,
     ) -> None:
         self.success = success
         self.tool_name = tool_name
@@ -713,3 +755,4 @@ class GenerationResult:  # [JS-K001.8]
         self.code = code
         self.yaml_content = yaml_content
         self.security_result = security_result
+        self.runtime_results = runtime_results or []

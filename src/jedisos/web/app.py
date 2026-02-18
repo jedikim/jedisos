@@ -242,6 +242,46 @@ def _register_builtin_tools(  # [JS-W001.10]
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_skills",
+                "description": "현재 설치된 스킬(도구) 목록을 조회합니다. 스킬 이름, 설명, 활성 상태를 확인할 수 있습니다.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "delete_skill",
+                "description": "설치된 스킬을 삭제합니다. 자동 생성된 스킬만 삭제 가능합니다. 삭제 전 반드시 사용자에게 확인을 받으세요.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "삭제할 스킬 이름"},
+                    },
+                    "required": ["name"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "upgrade_skill",
+                "description": "기존 스킬을 개선하거나 버그를 수정합니다. 기존 코드를 기반으로 새 버전을 생성합니다.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "개선할 스킬 이름"},
+                        "instructions": {"type": "string", "description": "개선/수정 지시사항 (예: '에러 처리 추가', '응답 형식 변경')"},
+                    },
+                    "required": ["name", "instructions"],
+                },
+            },
+        },
     ]
 
     # 생성된 스킬의 OpenAI 정의 추가
@@ -302,7 +342,24 @@ def _register_builtin_tools(  # [JS-W001.10]
                             tool_name=result.tool_name,
                             tools_count=len(result.tools),
                         )
-                        msg = f"'{result.tool_name}' 스킬이 생성되었습니다! 이제 사용할 수 있습니다."
+                        # 스킬 정보 구성
+                        tool_func = result.tools[0] if result.tools else None
+                        desc = getattr(tool_func, "_tool_description", "") if tool_func else ""
+                        params = getattr(tool_func, "_tool_parameters", {}) if tool_func else {}
+                        param_str = ", ".join(f"{k}: {v.get('type', '?')}" for k, v in params.items())
+
+                        # 런타임 테스트 결과
+                        test_info = ""
+                        if result.runtime_results:
+                            passed = sum(1 for r in result.runtime_results if r.passed)
+                            test_info = f"\n테스트: {passed}/{len(result.runtime_results)} 통과"
+
+                        msg = (
+                            f"'{result.tool_name}' 스킬이 생성되었습니다!\n"
+                            f"기능: {desc}\n"
+                            f"파라미터: {param_str}{test_info}\n"
+                            f"이제 대화에서 사용할 수 있습니다."
+                        )
                         await _broadcast_notification("skill_created", msg)
                     else:
                         logger.warning("skill_creation_failed_bg", description=description)
@@ -322,6 +379,171 @@ def _register_builtin_tools(  # [JS-W001.10]
             return {
                 "status": "generating",
                 "message": f"'{description}' 스킬을 백그라운드에서 생성 중입니다. 잠시 후 사용 가능합니다.",
+            }
+
+        elif name == "list_skills":
+            from jedisos.web.api.skills import _scan_skills
+
+            skills = _scan_skills()
+            summary = [
+                {
+                    "name": s["name"],
+                    "description": s["description"],
+                    "enabled": s["enabled"],
+                    "version": s.get("version", ""),
+                }
+                for s in skills
+            ]
+            return {"skills": summary, "total": len(summary)}
+
+        elif name == "delete_skill":
+            import re as _re
+            import shutil
+
+            from jedisos.web.api.chat import clear_all_history
+            from jedisos.web.api.skills import _scan_skills
+
+            skill_name = arguments.get("name", "")
+            if not skill_name:
+                return {"error": "스킬 이름을 지정해주세요."}
+
+            skills = _scan_skills()
+            skill = next((s for s in skills if s["name"] == skill_name), None)
+            if not skill:
+                return {"error": f"'{skill_name}' 스킬을 찾을 수 없습니다."}
+
+            if not skill.get("auto_generated"):
+                return {"error": "수동으로 설치한 스킬은 삭제할 수 없습니다."}
+
+            # 경로 검증 (traversal 방지)
+            skill_path = Path(skill["path"]).resolve()
+            if not _re.match(r"^[a-zA-Z0-9_\-]+$", skill_name):
+                return {"error": "잘못된 스킬 이름 형식입니다."}
+
+            data_dir = Path(os.environ.get("JEDISOS_DATA_DIR", "."))
+            allowed_dirs = [
+                (Path("tools") / "generated").resolve(),
+                (data_dir / "tools" / "generated").resolve(),
+            ]
+            if not any(str(skill_path).startswith(str(d)) for d in allowed_dirs):
+                logger.warning("skill_delete_path_blocked", name=skill_name, path=str(skill_path))
+                return {"error": "허용되지 않은 경로입니다."}
+
+            if not skill_path.exists():
+                return {"error": "스킬 디렉토리를 찾을 수 없습니다."}
+
+            # 파일 삭제
+            description = skill.get("description", "")
+            shutil.rmtree(skill_path)
+            logger.info("skill_deleted_by_agent", name=skill_name)
+
+            # 레지스트리에서 제거
+            skill_registry.pop(skill_name, None)
+            wrapped_tools[:] = [
+                t for t in wrapped_tools
+                if t.to_dict().get("function", {}).get("name") != skill_name
+            ]
+
+            # 캐시 무효화
+            _app_state.pop("_cached_agent", None)
+            clear_all_history()
+
+            # Hindsight에 삭제 기록
+            try:
+                await generator.retain_skill_deletion(
+                    tool_name=skill_name, description=description
+                )
+            except Exception as e:
+                logger.warning("skill_deletion_record_failed", error=str(e))
+
+            return {"status": "deleted", "name": skill_name}
+
+        elif name == "upgrade_skill":
+            skill_name = arguments.get("name", "")
+            instructions = arguments.get("instructions", "")
+
+            if not skill_name or not instructions:
+                return {"error": "스킬 이름과 수정 지시사항을 모두 입력해주세요."}
+
+            # 중복 방지
+            if _app_state.get("_skill_generating"):
+                return {
+                    "status": "already_generating",
+                    "message": "이미 스킬을 생성/업그레이드 중입니다. 완료된 후 다시 시도해 주세요.",
+                }
+
+            # 기존 스킬 찾기
+            from jedisos.web.api.skills import _scan_skills
+
+            skills = _scan_skills()
+            skill = next((s for s in skills if s["name"] == skill_name), None)
+            if not skill:
+                return {"error": f"'{skill_name}' 스킬을 찾을 수 없습니다."}
+
+            # 기존 코드 읽기
+            skill_path = Path(skill["path"])
+            tool_py = skill_path / "tool.py"
+            if not tool_py.exists():
+                return {"error": f"'{skill_name}' 스킬의 코드를 찾을 수 없습니다."}
+
+            existing_code = tool_py.read_text()
+
+            _app_state["_skill_generating"] = True
+
+            async def _bg_upgrade_skill() -> None:
+                """백그라운드에서 스킬을 업그레이드합니다."""
+                try:
+                    upgrade_desc = (
+                        f"[기존 스킬 '{skill_name}' 업그레이드]\n"
+                        f"기존 코드:\n{existing_code}\n\n"
+                        f"수정 지시:\n{instructions}\n\n"
+                        f"중요: tool_name은 반드시 '{skill_name}'을 유지하세요."
+                    )
+                    result = await generator.generate(upgrade_desc)
+                    if result.success:
+                        # 레지스트리 업데이트
+                        for tool_func in result.tools:
+                            tname = getattr(tool_func, "_tool_name", "")
+                            if tname:
+                                skill_registry[tname] = tool_func
+                                new_def = _skill_func_to_openai_def(tool_func)
+                                # 기존 정의 교체
+                                wrapped_tools[:] = [
+                                    t for t in wrapped_tools
+                                    if t.to_dict().get("function", {}).get("name") != tname
+                                ]
+                                wrapped_tools.append(ToolDef(new_def))
+                                logger.info("skill_upgraded", name=tname)
+
+                        _app_state.pop("_cached_agent", None)
+                        from jedisos.web.api.chat import clear_all_history
+                        clear_all_history()
+
+                        # 테스트 결과 요약
+                        test_info = ""
+                        if result.runtime_results:
+                            passed = sum(1 for r in result.runtime_results if r.passed)
+                            test_info = f" (테스트 {passed}/{len(result.runtime_results)} 통과)"
+
+                        msg = f"'{result.tool_name}' 스킬이 업그레이드되었습니다!{test_info}"
+                        await _broadcast_notification("skill_upgraded", msg)
+                    else:
+                        msg = f"'{skill_name}' 스킬 업그레이드에 실패했습니다."
+                        await _broadcast_notification("skill_failed", msg)
+                except Exception as e:
+                    logger.error("skill_upgrade_error", error=str(e))
+                    msg = f"스킬 업그레이드 중 오류가 발생했습니다: {e}"
+                    await _broadcast_notification("skill_error", msg)
+                finally:
+                    _app_state["_skill_generating"] = False
+
+            task = asyncio.create_task(_bg_upgrade_skill())
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
+
+            return {
+                "status": "upgrading",
+                "message": f"'{skill_name}' 스킬을 업그레이드 중입니다. 잠시 후 완료됩니다.",
             }
 
         # 동적 스킬 실행
