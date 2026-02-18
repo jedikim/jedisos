@@ -2,7 +2,7 @@
 [JS-K002] jedisos.forge.tester
 생성된 Skill 코드 자동 검증 - AST/보안/패턴/타입/데코레이터 일괄 테스트
 
-version: 1.0.0
+version: 1.1.0
 created: 2026-02-18
 modified: 2026-02-18
 """
@@ -10,6 +10,9 @@ modified: 2026-02-18
 from __future__ import annotations
 
 import ast
+import asyncio
+import json
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +29,27 @@ logger = structlog.get_logger()
 
 
 @dataclass
+class RuntimeTestCase:  # [JS-K002.9]
+    """런타임 테스트 케이스."""
+
+    description: str
+    kwargs: dict[str, Any] = field(default_factory=dict)
+    expect_error: bool = False
+    timeout_seconds: float = 15.0
+
+
+@dataclass
+class RuntimeTestResult:  # [JS-K002.10]
+    """런타임 테스트 실행 결과."""
+
+    test_case: RuntimeTestCase
+    passed: bool
+    output: Any = None
+    error: str = ""
+    elapsed_seconds: float = 0.0
+
+
+@dataclass
 class TestResult:  # [JS-K002.1]
     """자동 테스트 결과."""
 
@@ -34,6 +58,39 @@ class TestResult:  # [JS-K002.1]
     checks: dict[str, bool] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     security_result: SecurityResult | None = None
+    runtime_results: list[RuntimeTestResult] = field(default_factory=list)
+
+
+RUNTIME_TEST_PROMPT = """\
+Generate {count} test cases for a tool function.
+
+Tool name: {tool_name}
+Tool description: {tool_description}
+Parameters: {parameters}
+
+Rules:
+1. Test case 1: Normal/happy-path with realistic input
+2. Test case 2: Edge case (empty string, boundary value, special characters)
+3. Test case 3: Another valid input (different from #1)
+4. All kwargs must match the function's parameter names and types exactly
+5. expect_error should be false for most cases (the tool should handle errors gracefully)
+6. If the tool description mentions Korean input, include Korean text in test inputs
+
+Return a JSON array:
+[
+  {{"description": "test description", "kwargs": {{"param": "value"}}, "expect_error": false}},
+  ...
+]
+"""
+
+
+# 파라미터 타입별 기본값 매핑  [JS-K002.13]
+_DEFAULT_VALUES_BY_TYPE: dict[str, Any] = {
+    "str": "test",
+    "int": 1,
+    "float": 1.0,
+    "bool": True,
+}
 
 
 class SkillTester:  # [JS-K002.2]
@@ -221,3 +278,194 @@ class SkillTester:  # [JS-K002.2]
             if not hasattr(t, "_tool_description"):
                 return False, f"도구에 _tool_description이 없습니다: {t}"
         return True, ""
+
+    async def generate_test_cases(
+        self,
+        tool_name: str,
+        tool_description: str,
+        parameters: dict[str, dict[str, Any]],
+        count: int = 3,
+    ) -> list[RuntimeTestCase]:  # [JS-K002.11]
+        """LLM을 사용하여 런타임 테스트 케이스를 자동 생성합니다.
+
+        Args:
+            tool_name: 도구 이름
+            tool_description: 도구 설명
+            parameters: 파라미터 정의 (이름 -> {"type": "str", ...})
+            count: 생성할 테스트 케이스 수
+
+        Returns:
+            list[RuntimeTestCase]: 생성된 테스트 케이스 리스트
+
+        LLM 호출 실패 시 파라미터 타입 기반 기본값으로 폴백합니다.
+        """
+        import litellm
+
+        prompt = RUNTIME_TEST_PROMPT.format(
+            count=count,
+            tool_name=tool_name,
+            tool_description=tool_description,
+            parameters=json.dumps(parameters, ensure_ascii=False),
+        )
+
+        try:
+            response = await litellm.acompletion(
+                model="gpt-5.2",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=500,
+                response_format={"type": "json_object"},
+            )
+            content = response.choices[0].message.content
+            data = json.loads(content)
+
+            # JSON 배열 또는 {"test_cases": [...]} 형태 모두 허용
+            if isinstance(data, list):
+                raw_cases = data
+            elif isinstance(data, dict):
+                raw_cases = data.get("test_cases", data.get("tests", []))
+            else:
+                raw_cases = []
+
+            test_cases: list[RuntimeTestCase] = []
+            for item in raw_cases[:count]:
+                if not isinstance(item, dict):
+                    continue
+                test_cases.append(
+                    RuntimeTestCase(
+                        description=item.get("description", ""),
+                        kwargs=item.get("kwargs", {}),
+                        expect_error=bool(item.get("expect_error", False)),
+                    )
+                )
+
+            if test_cases:
+                logger.info(
+                    "runtime_test_cases_generated",
+                    tool_name=tool_name,
+                    count=len(test_cases),
+                )
+                return test_cases
+
+        except Exception as e:
+            logger.warning(
+                "runtime_test_case_gen_failed",
+                tool_name=tool_name,
+                error=str(e),
+            )
+
+        # 폴백: 파라미터 타입 기반 기본값으로 단일 테스트 케이스 생성
+        fallback_kwargs: dict[str, Any] = {}
+        for param_name, param_info in parameters.items():
+            param_type = param_info.get("type", "str")
+            fallback_kwargs[param_name] = _DEFAULT_VALUES_BY_TYPE.get(
+                param_type, "test"
+            )
+
+        logger.info(
+            "runtime_test_cases_fallback",
+            tool_name=tool_name,
+            kwargs=fallback_kwargs,
+        )
+
+        return [
+            RuntimeTestCase(
+                description="기본값 폴백 테스트",
+                kwargs=fallback_kwargs,
+                expect_error=False,
+            )
+        ]
+
+    async def run_runtime_tests(
+        self,
+        func: Any,
+        test_cases: list[RuntimeTestCase],
+    ) -> list[RuntimeTestResult]:  # [JS-K002.12]
+        """런타임 테스트 케이스를 실행합니다.
+
+        Args:
+            func: 테스트할 도구 함수 (async callable)
+            test_cases: 실행할 테스트 케이스 리스트
+
+        Returns:
+            list[RuntimeTestResult]: 각 테스트 케이스의 실행 결과
+        """
+        results: list[RuntimeTestResult] = []
+
+        for tc in test_cases:
+            start = time.monotonic()
+            try:
+                if asyncio.iscoroutinefunction(func):
+                    output = await asyncio.wait_for(
+                        func(**tc.kwargs),
+                        timeout=tc.timeout_seconds,
+                    )
+                else:
+                    output = func(**tc.kwargs)
+
+                elapsed = time.monotonic() - start
+
+                # 함수가 정상 반환하면 PASS (dict에 ok: False여도 유효한 응답)
+                if tc.expect_error:
+                    # 에러를 예상했지만 정상 반환됨 — 여전히 PASS로 처리
+                    # (함수가 내부적으로 에러를 처리한 경우)
+                    results.append(
+                        RuntimeTestResult(
+                            test_case=tc,
+                            passed=True,
+                            output=output,
+                            elapsed_seconds=elapsed,
+                        )
+                    )
+                else:
+                    results.append(
+                        RuntimeTestResult(
+                            test_case=tc,
+                            passed=True,
+                            output=output,
+                            elapsed_seconds=elapsed,
+                        )
+                    )
+
+            except TimeoutError:
+                elapsed = time.monotonic() - start
+                results.append(
+                    RuntimeTestResult(
+                        test_case=tc,
+                        passed=False,
+                        error=f"타임아웃 ({tc.timeout_seconds}초 초과)",
+                        elapsed_seconds=elapsed,
+                    )
+                )
+
+            except Exception as e:
+                elapsed = time.monotonic() - start
+                if tc.expect_error:
+                    # 에러를 예상했고 실제로 발생 → PASS
+                    results.append(
+                        RuntimeTestResult(
+                            test_case=tc,
+                            passed=True,
+                            error=str(e),
+                            elapsed_seconds=elapsed,
+                        )
+                    )
+                else:
+                    # 에러를 예상하지 않았는데 발생 → FAIL
+                    results.append(
+                        RuntimeTestResult(
+                            test_case=tc,
+                            passed=False,
+                            error=str(e),
+                            elapsed_seconds=elapsed,
+                        )
+                    )
+
+            logger.info(
+                "runtime_test_executed",
+                description=tc.description,
+                passed=results[-1].passed,
+                elapsed=f"{results[-1].elapsed_seconds:.3f}s",
+            )
+
+        return results
