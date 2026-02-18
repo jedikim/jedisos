@@ -181,129 +181,145 @@ class SkillGenerator:  # [JS-K001.3]
         last_error: str = ""
 
         for attempt in range(1, self.max_retries + 1):
-            logger.info("skill_generation_start", request=request, attempt=attempt)
-
-            # 1. LLM으로 코드 스펙 생성 (또는 직접 주입)
-            if llm_response is None:
-                spec = await self._call_llm(
-                    request,
-                    reference_code=reference_code,
-                    error_context=last_error,
-                    skill_memory=skill_memory_context,
-                )
-            else:
-                spec = llm_response
-
-            if spec is None:
-                last_error = "LLM이 유효한 JSON 응답을 반환하지 못했습니다."
-                logger.error("skill_generation_llm_failed", attempt=attempt)
-                continue
-
-            # 2. tool_name 검증 (경로 traversal 방지)
-            tool_name = spec.get("tool_name", "unnamed")
-            if not re.match(r"^[a-zA-Z0-9_]+$", tool_name):
-                last_error = f"잘못된 tool_name '{tool_name}' — 영문, 숫자, 밑줄만 허용됩니다."
-                logger.error(
-                    "skill_generation_invalid_name",
-                    tool_name=tool_name,
-                    attempt=attempt,
-                )
-                continue
-
-            code = self._render_code(spec)
-            yaml_content = self._render_yaml(spec)
-
-            # 3. 보안 검사
-            security_result = await self.security_checker.check(code, tool_name)
-            if not security_result.passed:
-                issues_str = "; ".join(i.message for i in security_result.issues)
-                last_error = f"보안 검사 실패: {issues_str}"
-                logger.warning(
-                    "skill_generation_security_failed",
-                    tool_name=tool_name,
-                    attempt=attempt,
-                    issues=[i.message for i in security_result.issues],
-                )
-                continue
-
-            # 4. 파일 저장
-            tool_dir = self.output_dir / tool_name
-            tool_dir.mkdir(parents=True, exist_ok=True)
-            (tool_dir / "tool.py").write_text(code)
-            (tool_dir / "tool.yaml").write_text(yaml_content)
-
-            # 5. 핫로드 테스트
             try:
-                tools = self.tool_loader.load_tool(tool_dir)
-            except Exception as e:  # ImportError, FileNotFoundError, or unexpected
-                last_error = f"핫로드 실패 ({type(e).__name__}): {e}"
-                logger.error(
-                    "skill_generation_load_failed",
+                logger.info("skill_generation_start", request=request, attempt=attempt)
+
+                # 1. LLM으로 코드 스펙 생성 (또는 직접 주입)
+                if llm_response is None:
+                    spec = await self._call_llm(
+                        request,
+                        reference_code=reference_code,
+                        error_context=last_error,
+                        skill_memory=skill_memory_context,
+                    )
+                else:
+                    spec = llm_response
+
+                if spec is None:
+                    last_error = "LLM이 유효한 JSON 응답을 반환하지 못했습니다."
+                    logger.error("skill_generation_llm_failed", attempt=attempt)
+                    continue
+
+                # 2. tool_name 검증 (경로 traversal 방지)
+                tool_name = spec.get("tool_name", "unnamed")
+                if not re.match(r"^[a-zA-Z0-9_]+$", tool_name):
+                    last_error = (
+                        f"잘못된 tool_name '{tool_name}' — 영문, 숫자, 밑줄만 허용됩니다."
+                    )
+                    logger.error(
+                        "skill_generation_invalid_name",
+                        tool_name=tool_name,
+                        attempt=attempt,
+                    )
+                    continue
+
+                code = self._render_code(spec)
+                yaml_content = self._render_yaml(spec)
+
+                # 3. 보안 검사
+                security_result = await self.security_checker.check(code, tool_name)
+                if not security_result.passed:
+                    issues_str = "; ".join(i.message for i in security_result.issues)
+                    last_error = f"보안 검사 실패: {issues_str}"
+                    logger.warning(
+                        "skill_generation_security_failed",
+                        tool_name=tool_name,
+                        attempt=attempt,
+                        issues=[i.message for i in security_result.issues],
+                    )
+                    continue
+
+                # 4. 파일 저장
+                tool_dir = self.output_dir / tool_name
+                tool_dir.mkdir(parents=True, exist_ok=True)
+                (tool_dir / "tool.py").write_text(code)
+                (tool_dir / "tool.yaml").write_text(yaml_content)
+
+                # 5. 핫로드 테스트
+                try:
+                    tools = self.tool_loader.load_tool(tool_dir)
+                except Exception as e:
+                    last_error = f"핫로드 실패 ({type(e).__name__}): {e}"
+                    logger.error(
+                        "skill_generation_load_failed",
+                        tool_name=tool_name,
+                        attempt=attempt,
+                        error=str(e),
+                    )
+                    continue
+
+                # 5.5. 런타임 테스트 (실제 함수 호출)
+                runtime_results = []
+                if tools:
+                    try:
+                        test_cases = await self.tester.generate_test_cases(
+                            tool_name=tool_name,
+                            tool_description=spec.get("description", ""),
+                            parameters=getattr(tools[0], "_tool_parameters", {}),
+                        )
+                        runtime_results = await self.tester.run_runtime_tests(
+                            tools[0], test_cases
+                        )
+                        failed = [r for r in runtime_results if not r.passed]
+                        if failed:
+                            error_details = "; ".join(
+                                f"Test '{r.test_case.description}': {r.error}"
+                                for r in failed
+                            )
+                            last_error = (
+                                f"런타임 테스트 실패 ({len(failed)}/{len(runtime_results)}): "
+                                f"{error_details}"
+                            )
+                            logger.warning(
+                                "skill_generation_runtime_test_failed",
+                                tool_name=tool_name,
+                                attempt=attempt,
+                                failed_count=len(failed),
+                                total_count=len(runtime_results),
+                            )
+                            continue  # retry with error feedback
+                    except Exception as e:
+                        logger.warning(
+                            "skill_runtime_test_error",
+                            tool_name=tool_name,
+                            error=str(e),
+                        )
+                        # Don't fail on test infrastructure error, proceed
+
+                logger.info(
+                    "skill_generation_success",
                     tool_name=tool_name,
+                    tool_count=len(tools),
+                )
+
+                # 6. 성공: Hindsight에 스킬 정보 기록
+                await self._retain_skill_memory(
+                    tool_name=tool_name,
+                    description=spec.get("description", ""),
+                    tags=spec.get("tags", []),
+                    code=code,
+                )
+
+                return GenerationResult(
+                    success=True,
+                    tool_name=tool_name,
+                    tool_dir=tool_dir,
+                    tools=tools,
+                    code=code,
+                    yaml_content=yaml_content,
+                    security_result=security_result,
+                    runtime_results=runtime_results,
+                )
+
+            except Exception as e:
+                last_error = f"예기치 않은 오류 ({type(e).__name__}): {e}"
+                logger.error(
+                    "skill_generation_unexpected_error",
                     attempt=attempt,
+                    error_type=type(e).__name__,
                     error=str(e),
                 )
                 continue
-
-            # 5.5. 런타임 테스트 (실제 함수 호출)
-            runtime_results = []
-            if tools:
-                try:
-                    test_cases = await self.tester.generate_test_cases(
-                        tool_name=tool_name,
-                        tool_description=spec.get("description", ""),
-                        parameters=getattr(tools[0], "_tool_parameters", {}),
-                    )
-                    runtime_results = await self.tester.run_runtime_tests(tools[0], test_cases)
-                    failed = [r for r in runtime_results if not r.passed]
-                    if failed:
-                        error_details = "; ".join(
-                            f"Test '{r.test_case.description}': {r.error}" for r in failed
-                        )
-                        last_error = (
-                            f"런타임 테스트 실패 ({len(failed)}/{len(runtime_results)}): "
-                            f"{error_details}"
-                        )
-                        logger.warning(
-                            "skill_generation_runtime_test_failed",
-                            tool_name=tool_name,
-                            attempt=attempt,
-                            failed_count=len(failed),
-                            total_count=len(runtime_results),
-                        )
-                        continue  # retry with error feedback
-                except Exception as e:
-                    logger.warning(
-                        "skill_runtime_test_error",
-                        tool_name=tool_name,
-                        error=str(e),
-                    )
-                    # Don't fail on test infrastructure error, proceed
-
-            logger.info(
-                "skill_generation_success",
-                tool_name=tool_name,
-                tool_count=len(tools),
-            )
-
-            # 6. 성공: Hindsight에 스킬 정보 기록
-            await self._retain_skill_memory(
-                tool_name=tool_name,
-                description=spec.get("description", ""),
-                tags=spec.get("tags", []),
-                code=code,
-            )
-
-            return GenerationResult(
-                success=True,
-                tool_name=tool_name,
-                tool_dir=tool_dir,
-                tools=tools,
-                code=code,
-                yaml_content=yaml_content,
-                security_result=security_result,
-                runtime_results=runtime_results,
-            )
 
         return GenerationResult(
             success=False,
@@ -507,14 +523,20 @@ class SkillGenerator:  # [JS-K001.3]
                 query=f"skill: {request}",
                 bank_id=SKILL_MEMORY_BANK,
             )
-            # Hindsight recall 응답에서 컨텍스트 추출
-            context = result.get("context", "")
-            if not context and isinstance(result, dict):
-                # 대체 응답 형식 처리
-                memories = result.get("memories", [])
-                if memories:
-                    parts = [m.get("content", "") for m in memories if m.get("content")]
-                    context = "\n".join(parts)
+            # Hindsight recall 응답에서 컨텍스트 추출 (dict/RecallResponse 모두 지원)
+            context = ""
+            if isinstance(result, dict):
+                context = result.get("context", "")
+                if not context:
+                    memories = result.get("memories", [])
+                    if memories:
+                        parts = [
+                            m.get("content", "") for m in memories if m.get("content")
+                        ]
+                        context = "\n".join(parts)
+            elif result is not None:
+                # RecallResponse 등 비-dict 객체 → 문자열 변환
+                context = str(result)
 
             if context:
                 logger.info("skill_memory_found", request=request, context_len=len(context))

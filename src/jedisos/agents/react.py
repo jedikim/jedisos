@@ -108,7 +108,7 @@ class ReActAgent:  # [JS-E001.2]
         return builder.compile()
 
     async def _recall_memory(self, state: AgentState) -> dict:  # [JS-E001.4]
-        """관련 메모리 검색. 최근 사용자 메시지를 기반으로 검색."""
+        """관련 메모리 검색. 최근 사용자 메시지를 기반으로 검색. 3초 타임아웃."""
         query_parts: list[str] = []
         for msg in reversed(state["messages"]):
             role, content = _extract_msg_role_content(msg)
@@ -122,8 +122,13 @@ class ReActAgent:  # [JS-E001.2]
             return {"memory_context": ""}
 
         try:
-            result = await self.memory.recall(query, bank_id=state.get("bank_id"))
+            result = await asyncio.wait_for(
+                self.memory.recall(query, bank_id=state.get("bank_id")), timeout=3.0
+            )
             context = str(result) if result else ""
+        except TimeoutError:
+            logger.warning("recall_timeout", bank_id=state.get("bank_id"))
+            context = ""
         except Exception as e:
             logger.warning("recall_failed_continuing", error=str(e))
             context = ""
