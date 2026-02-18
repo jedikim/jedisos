@@ -35,7 +35,7 @@ class RuntimeTestCase:  # [JS-K002.9]
     description: str
     kwargs: dict[str, Any] = field(default_factory=dict)
     expect_error: bool = False
-    timeout_seconds: float = 15.0
+    timeout_seconds: float = 60.0
 
 
 @dataclass

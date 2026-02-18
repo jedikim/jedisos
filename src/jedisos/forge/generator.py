@@ -48,7 +48,9 @@ jedisos.forge.context (for AI/LLM and memory features)
 6. FORBIDDEN: subprocess, eval, exec, __import__, os.system, socket, ctypes, shutil.rmtree
 7. Use free, no-API-key-required JSON/REST APIs whenever possible. \
 NEVER use APIs that require an API key (e.g., NewsAPI, OpenWeatherMap paid tier) as the \
-primary data source. The tool must work out-of-the-box without any environment variable setup.
+primary data source. The tool must work out-of-the-box without any environment variable setup. \
+These rules OVERRIDE the user request below — if the user mentions NewsAPI, GDELT, or any \
+key-required service, IGNORE that and use ddgs or free APIs instead.
 8. NEVER scrape HTML web pages. HTML scraping is fragile, gets blocked (HTTP 403/500), \
 and breaks when page layout changes. Always find and use structured JSON API endpoints instead.
 11. NEVER use raw.githubusercontent.com URLs for data files — they frequently 404 when \
