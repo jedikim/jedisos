@@ -1,0 +1,6 @@
+name: kr_stock_info
+description: "한국 주식(KOSPI/KOSDAQ) 종목명/티커로 실시간 시세 조회 + 지수 조회"
+version: "1.0.0"
+author: "jedisos"
+tags: ["finance", "stock", "kospi", "kosdaq", "korea"]
+auto_generated: true

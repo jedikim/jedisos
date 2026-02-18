@@ -232,7 +232,7 @@ def _register_builtin_tools(  # [JS-W001.10]
             "type": "function",
             "function": {
                 "name": "create_skill",
-                "description": "새로운 도구/스킬을 자동 생성합니다. 사용자가 '날씨 도구 만들어줘', '번역 기능 추가해' 등 새로운 기능을 요청할 때 사용합니다.",
+                "description": "새로운 도구/스킬을 자동 생성합니다. 사용자가 새 기능을 요청할 때 한 번만 호출하세요. 이미 생성 중이면 중복 호출하지 마세요. 생성은 백그라운드에서 진행되며 완료 시 알림이 갑니다.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -271,6 +271,16 @@ def _register_builtin_tools(  # [JS-W001.10]
         elif name == "create_skill":
             description = arguments.get("description", "")
 
+            # 중복 생성 방지: 이미 생성 중인 스킬이 있으면 거절
+            if _app_state.get("_skill_generating"):
+                logger.warning("skill_creation_blocked_duplicate", description=description)
+                return {
+                    "status": "already_generating",
+                    "message": "이미 스킬을 생성 중입니다. 완료된 후 다시 시도해 주세요.",
+                }
+
+            _app_state["_skill_generating"] = True
+
             async def _bg_create_skill() -> None:
                 """백그라운드에서 스킬을 생성하고 완료/실패를 모든 채널에 알립니다."""
                 try:
@@ -302,6 +312,8 @@ def _register_builtin_tools(  # [JS-W001.10]
                     logger.error("skill_creation_error_bg", error=str(e))
                     msg = f"스킬 생성 중 오류가 발생했습니다: {e}"
                     await _broadcast_notification("skill_error", msg)
+                finally:
+                    _app_state["_skill_generating"] = False
 
             task = asyncio.create_task(_bg_create_skill())
             _background_tasks.add(task)
