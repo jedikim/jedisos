@@ -131,6 +131,15 @@ function app() {
          */
         async init() {
             try {
+                // 1단계: SecVault 상태 확인 (최우선)
+                await this.checkVaultStatus();
+                if (this.vault.status === 'needs_setup' || this.vault.status === 'locked') {
+                    this.vault.showModal = true;
+                    this.loading = false;
+                    return; // vault 해결 후 continueAfterVault()에서 이어짐
+                }
+
+                // 2단계: Setup Wizard 확인
                 await this.checkSetupStatus();
                 if (this.setup.isFirstRun) {
                     this.currentPage = 'setup';
@@ -454,13 +463,22 @@ function app() {
         // ══════════════════════════════
 
         /**
-         * SecVault 비밀번호 설정 또는 잠금 해제.  [JS-W010.27]
+         * SecVault 상태 확인 (REST API).  [JS-W010.27]
          */
-        submitVaultPassword() {
-            if (!this.chat.ws || this.chat.ws.readyState !== WebSocket.OPEN) {
-                this.vault.error = 'WebSocket이 연결되지 않았습니다';
-                return;
+        async checkVaultStatus() {
+            try {
+                const data = await this.api('GET', '/api/vault/status');
+                this.vault.status = data.status;
+            } catch (e) {
+                console.error('Vault 상태 확인 실패:', e);
+                this.vault.status = 'unavailable';
             }
+        },
+
+        /**
+         * SecVault 비밀번호 설정 또는 잠금 해제 (REST API).  [JS-W010.28]
+         */
+        async submitVaultPassword() {
             if (!this.vault.password || this.vault.password.length < 8) {
                 this.vault.error = '비밀번호는 8자 이상이어야 합니다';
                 return;
@@ -470,28 +488,51 @@ function app() {
                     this.vault.error = '비밀번호가 일치하지 않습니다';
                     return;
                 }
-                this.vault.saving = true;
-                this.vault.error = '';
-                this.chat.ws.send(JSON.stringify({
-                    type: 'vault_setup',
-                    password: this.vault.password,
-                }));
-            } else if (this.vault.status === 'locked') {
-                this.vault.saving = true;
-                this.vault.error = '';
-                this.chat.ws.send(JSON.stringify({
-                    type: 'vault_unlock',
-                    password: this.vault.password,
-                }));
             }
-            // 응답은 vault_status 메시지로 옴 — onmessage에서 처리
+
+            this.vault.saving = true;
+            this.vault.error = '';
+
+            try {
+                const endpoint = this.vault.status === 'needs_setup' ? '/api/vault/setup' : '/api/vault/unlock';
+                const data = await this.api('POST', endpoint, { password: this.vault.password });
+
+                if (data.ok) {
+                    this.vault.status = 'unlocked';
+                    this.vault.showModal = false;
+                    this.vault.password = '';
+                    this.vault.confirmPassword = '';
+                    this.showToast('SecVault 잠금 해제됨');
+                    await this.continueAfterVault();
+                } else {
+                    this.vault.error = data.error || '비밀번호가 올바르지 않습니다';
+                }
+            } catch (e) {
+                this.vault.error = e.message || '요청 실패';
+            } finally {
+                this.vault.saving = false;
+            }
         },
 
         /**
-         * SecVault 모달 없이 건너뛰기 (암호화 비활성).  [JS-W010.28]
+         * Vault 해결 후 다음 단계로 진행.  [JS-W010.29]
          */
-        skipVault() {
+        async continueAfterVault() {
+            await this.checkSetupStatus();
+            if (this.setup.isFirstRun) {
+                this.currentPage = 'setup';
+            } else {
+                this.currentPage = 'chat';
+                this.connectWebSocket();
+            }
+        },
+
+        /**
+         * SecVault 모달 없이 건너뛰기 (암호화 비활성).  [JS-W010.30]
+         */
+        async skipVault() {
             this.vault.showModal = false;
+            await this.continueAfterVault();
         },
 
         // ══════════════════════════════

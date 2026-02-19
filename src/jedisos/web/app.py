@@ -791,6 +791,7 @@ def create_app() -> FastAPI:  # [JS-W001.3]
     from jedisos.web.api.monitoring import router as monitoring_router
     from jedisos.web.api.settings import router as settings_router
     from jedisos.web.api.skills import router as skills_router
+    from jedisos.web.api.vault import router as vault_router
     from jedisos.web.setup_wizard import router as wizard_router
 
     app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
@@ -799,6 +800,7 @@ def create_app() -> FastAPI:  # [JS-W001.3]
     app.include_router(skills_router, prefix="/api/skills", tags=["skills"])
     app.include_router(monitoring_router, prefix="/api/monitoring", tags=["monitoring"])
     app.include_router(wizard_router, prefix="/api/setup", tags=["setup"])
+    app.include_router(vault_router, prefix="/api/vault", tags=["vault"])
 
     @app.get("/", response_class=HTMLResponse)
     async def serve_index(request: Request) -> HTMLResponse:  # [JS-W001.6]
