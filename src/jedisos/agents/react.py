@@ -35,6 +35,23 @@ MAX_TOOL_CALLS = 10
 _SKILL_MGMT_TOOLS = frozenset({"create_skill", "list_skills", "delete_skill", "upgrade_skill"})
 _MEMORY_ONLY_INTENTS = frozenset({"chat", "question"})
 
+# 키워드 기반 skill_request 감지 — classify 모델이 놓칠 때 fallback
+_SKILL_REQUEST_KEYWORDS = (
+    "만들어",
+    "만들어줘",
+    "추가해",
+    "추가해줘",
+    "고쳐",
+    "고쳐줘",
+    "수정해",
+    "수정해줘",
+    "개선해",
+    "업그레이드",
+    "도구",
+    "스킬",
+    "기능",
+)
+
 # 백그라운드 태스크 참조 (GC 방지)
 _background_tasks: set[asyncio.Task[None]] = set()
 
@@ -413,15 +430,20 @@ class ReActAgent:  # [JS-E001.2]
             role = _ROLE_MAP.get(msg.get("role", ""), msg.get("role", ""))
             llm_messages.append({"role": role, "content": msg.get("content", "")})
 
-        # 2.5. 의도 분류 (소형 모델 — 저렴/빠름)
+        # 2.5. 의도 분류 (소형 모델 + 키워드 fallback)
         llm_role = "chat"
         intent = "chat"
         try:
             raw_intent = await self.llm.complete_text(
                 prompt=f"사용자: {user_message}",
                 system=(
-                    "사용자 메시지의 의도를 한 단어로만 분류하세요. "
+                    "사용자 메시지의 의도를 한 단어로만 분류하세요.\n"
                     "선택지: chat, question, remember, skill_request, complex\n"
+                    "- skill_request: 도구/스킬/기능을 만들어달라, 고쳐달라, 수정해달라는 요청\n"
+                    "- remember: 개인정보 저장 요청 (기억해, 알아둬)\n"
+                    "- complex: 분석, 비교, 추론이 필요한 복잡한 질문\n"
+                    "- question: 단순 정보 질문\n"
+                    "- chat: 인사, 잡담\n"
                     "한 단어만 답하세요."
                 ),
                 role="classify",
@@ -429,13 +451,21 @@ class ReActAgent:  # [JS-E001.2]
                 temperature=0.0,
             )
             intent = raw_intent.strip().lower().split()[0] if raw_intent else "chat"
-            if intent == "complex":
-                llm_role = "reason"
-            elif intent == "skill_request":
-                llm_role = "code"
-            logger.info("intent_classified", intent=intent, llm_role=llm_role)
         except Exception as e:
             logger.debug("intent_classify_failed", error=str(e))
+
+        # 키워드 fallback: classify 모델이 놓친 skill_request 감지
+        if intent in _MEMORY_ONLY_INTENTS:
+            msg_lower = user_message.lower()
+            if any(kw in msg_lower for kw in _SKILL_REQUEST_KEYWORDS):
+                intent = "skill_request"
+                logger.info("intent_keyword_override", original="chat", overridden="skill_request")
+
+        if intent == "complex":
+            llm_role = "reason"
+        elif intent == "skill_request":
+            llm_role = "code"
+        logger.info("intent_classified", intent=intent, llm_role=llm_role)
 
         # 2.6. 의도별 도구 필터링 — 불필요한 도구 호출 방지 (47초→6초)
         if self.tools:
