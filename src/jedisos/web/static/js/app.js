@@ -61,7 +61,7 @@ function app() {
             discordToken: '',
             slackBotToken: '',
             slackAppToken: '',
-            models: 'gpt-5.2, gemini/gemini-3-flash',
+            // models: 자동 구성 (auto_config.py)으로 대체됨
             saving: false,
             showTelegramGuide: false,
             showDiscordGuide: false,
@@ -263,7 +263,7 @@ function app() {
                     discord_bot_token: this.setup.discordToken,
                     slack_bot_token: this.setup.slackBotToken,
                     slack_app_token: this.setup.slackAppToken,
-                    models: this.setup.models.split(',').map(s => s.trim()).filter(Boolean),
+                    models: [],
                 });
                 this.showToast('설정이 완료되었습니다');
                 this.setup.isFirstRun = false;
