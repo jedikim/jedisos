@@ -53,11 +53,20 @@ async def vault_setup(request: VaultPasswordRequest) -> dict:
     if vault_client is None:
         return {"ok": False, "error": "SecVault가 초기화되지 않았습니다."}
 
-    ok = await vault_client.setup(request.password)
-    if ok:
+    try:
+        resp = await vault_client._send({"op": "setup", "data": request.password})
+    except Exception as e:
+        logger.error("vault_setup_error", error=str(e))
+        return {"ok": False, "error": f"SecVault 연결 실패: {e}"}
+
+    if resp.get("ok"):
         state["vault_status"] = "unlocked"
+        logger.info("vault_setup_success")
         return {"ok": True, "status": "unlocked"}
-    return {"ok": False, "error": "비밀번호 설정에 실패했습니다. (8자 이상)"}
+
+    error_msg = resp.get("error", "알 수 없는 오류")
+    logger.warning("vault_setup_failed", error=error_msg)
+    return {"ok": False, "error": error_msg}
 
 
 @router.post("/unlock")  # [JS-W007.4]
@@ -70,8 +79,17 @@ async def vault_unlock(request: VaultPasswordRequest) -> dict:
     if vault_client is None:
         return {"ok": False, "error": "SecVault가 초기화되지 않았습니다."}
 
-    ok = await vault_client.unlock(request.password)
-    if ok:
+    try:
+        resp = await vault_client._send({"op": "unlock", "data": request.password})
+    except Exception as e:
+        logger.error("vault_unlock_error", error=str(e))
+        return {"ok": False, "error": f"SecVault 연결 실패: {e}"}
+
+    if resp.get("ok"):
         state["vault_status"] = "unlocked"
+        logger.info("vault_unlock_success")
         return {"ok": True, "status": "unlocked"}
-    return {"ok": False, "error": "비밀번호가 틀립니다."}
+
+    error_msg = resp.get("error", "비밀번호가 틀립니다.")
+    logger.warning("vault_unlock_failed", error=error_msg)
+    return {"ok": False, "error": error_msg}
