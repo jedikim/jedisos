@@ -181,12 +181,14 @@ class SkillGenerator:  # [JS-K001.3]
         self,
         request: str,
         llm_response: dict[str, Any] | None = None,
+        previous_version: str = "",
     ) -> GenerationResult:
         """사용자 요청에서 Skill을 생성합니다.
 
         Args:
             request: 사용자 요청 문자열 (예: "날씨 도구 만들어줘")
             llm_response: LLM 응답 (테스트용 직접 주입)
+            previous_version: 업그레이드 시 기존 버전 (예: "1.0.0" → "1.0.1")
 
         Returns:
             GenerationResult: 생성 결과
@@ -216,6 +218,10 @@ class SkillGenerator:  # [JS-K001.3]
                     last_error = "LLM이 유효한 JSON 응답을 반환하지 못했습니다."
                     logger.error("skill_generation_llm_failed", attempt=attempt)
                     continue
+
+                # 업그레이드 시 기존 버전 주입 → _render_yaml에서 패치 버전 증가
+                if previous_version:
+                    spec["previous_version"] = previous_version
 
                 # 2. tool_name 검증 (경로 traversal 방지)
                 tool_name = spec.get("tool_name", "unnamed")
@@ -744,11 +750,26 @@ class SkillGenerator:  # [JS-K001.3]
             functions=spec.get("functions", []),
         )
 
+    @staticmethod
+    def _bump_version(prev: str) -> str:  # [JS-K001.17]
+        """시맨틱 버전의 패치를 1 증가시킵니다. (예: 1.0.0 → 1.0.1)"""
+        parts = prev.split(".")
+        if len(parts) == 3:
+            try:
+                parts[2] = str(int(parts[2]) + 1)
+                return ".".join(parts)
+            except ValueError:
+                pass
+        return prev
+
     def _render_yaml(self, spec: dict[str, Any]) -> str:  # [JS-K001.7]
         """tool.yaml을 렌더링합니다."""
+        prev_ver = spec.get("previous_version", "")
+        version = self._bump_version(prev_ver) if prev_ver else "1.0.0"
+
         data = {
             "name": spec.get("tool_name", "unnamed"),
-            "version": "1.0.0",
+            "version": version,
             "description": spec.get("description", ""),
             "author": "jedisos-agent",
             "auto_generated": True,

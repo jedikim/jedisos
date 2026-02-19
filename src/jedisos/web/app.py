@@ -522,6 +522,18 @@ def _register_builtin_tools(  # [JS-W001.10]
 
             existing_code = tool_py.read_text()
 
+            # 기존 버전 읽기
+            tool_yaml_path = skill_path / "tool.yaml"
+            prev_version = ""
+            if tool_yaml_path.exists():
+                try:
+                    import yaml as _yaml
+
+                    meta = _yaml.safe_load(tool_yaml_path.read_text())
+                    prev_version = str(meta.get("version", "1.0.0")) if meta else "1.0.0"
+                except Exception:
+                    prev_version = "1.0.0"
+
             _app_state["_skill_generating"] = True
 
             async def _bg_upgrade_skill() -> None:
@@ -533,7 +545,7 @@ def _register_builtin_tools(  # [JS-W001.10]
                         f"수정 지시:\n{instructions}\n\n"
                         f"중요: tool_name은 반드시 '{skill_name}'을 유지하세요."
                     )
-                    result = await generator.generate(upgrade_desc)
+                    result = await generator.generate(upgrade_desc, previous_version=prev_version)
                     if result.success:
                         # 레지스트리 업데이트
                         for tool_func in result.tools:
