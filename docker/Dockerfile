@@ -45,6 +45,11 @@ RUN pip install --no-cache-dir build && \
 FROM python:3.12-slim
 WORKDIR /app
 
+# OCI 라벨 (ghcr.io 리포지토리 자동 연결)
+LABEL org.opencontainers.image.source="https://github.com/jedikim/jedisos"
+LABEL org.opencontainers.image.description="JediSOS - AI Personal Assistant"
+LABEL org.opencontainers.image.licenses="MIT"
+
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin/jedisos /usr/local/bin/jedisos
 
