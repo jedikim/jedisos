@@ -43,7 +43,7 @@ CURATED_SERVERS: list[dict[str, Any]] = [  # [JS-D003.1]
         "description": "Brave Search API로 웹 검색을 수행합니다.",
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-brave-search"],
-        "env": {"BRAVE_API_KEY": ""},
+        "env": {"BRAVE_API_KEY": ""},  # nosec B105
         "tags": ["search", "web", "brave"],
         "source": "curated",
     },
@@ -60,7 +60,7 @@ CURATED_SERVERS: list[dict[str, Any]] = [  # [JS-D003.1]
         "name": "filesystem",
         "description": "로컬 파일시스템을 읽고 쓸 수 있습니다.",
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],  # nosec B108
         "tags": ["file", "filesystem", "directory", "read", "write"],
         "source": "curated",
     },
@@ -76,7 +76,7 @@ CURATED_SERVERS: list[dict[str, Any]] = [  # [JS-D003.1]
         "name": "sqlite",
         "description": "SQLite 데이터베이스를 조회하고 관리합니다.",
         "command": "uvx",
-        "args": ["mcp-server-sqlite", "--db-path", "/tmp/test.db"],
+        "args": ["mcp-server-sqlite", "--db-path", "/tmp/test.db"],  # nosec B108
         "tags": ["database", "sqlite", "sql", "query"],
         "source": "curated",
     },
@@ -86,7 +86,7 @@ CURATED_SERVERS: list[dict[str, Any]] = [  # [JS-D003.1]
         "description": "GitHub 리포지토리, 이슈, PR을 관리합니다.",
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-github"],
-        "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": ""},
+        "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": ""},  # nosec B105
         "tags": ["github", "git", "repository", "issue", "pr"],
         "source": "curated",
     },
@@ -95,7 +95,7 @@ CURATED_SERVERS: list[dict[str, Any]] = [  # [JS-D003.1]
         "description": "GitLab 프로젝트, 이슈, 머지 리퀘스트를 관리합니다.",
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-gitlab"],
-        "env": {"GITLAB_PERSONAL_ACCESS_TOKEN": "", "GITLAB_API_URL": "https://gitlab.com/api/v4"},
+        "env": {"GITLAB_PERSONAL_ACCESS_TOKEN": "", "GITLAB_API_URL": "https://gitlab.com/api/v4"},  # nosec B105
         "tags": ["gitlab", "git", "repository", "issue", "mr"],
         "source": "curated",
     },
@@ -113,7 +113,7 @@ CURATED_SERVERS: list[dict[str, Any]] = [  # [JS-D003.1]
         "description": "Slack 메시지 전송, 채널 관리를 수행합니다.",
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-slack"],
-        "env": {"SLACK_BOT_TOKEN": "", "SLACK_TEAM_ID": ""},
+        "env": {"SLACK_BOT_TOKEN": "", "SLACK_TEAM_ID": ""},  # nosec B105
         "tags": ["slack", "chat", "message", "team"],
         "source": "curated",
     },
@@ -130,7 +130,7 @@ CURATED_SERVERS: list[dict[str, Any]] = [  # [JS-D003.1]
         "description": "Google Maps API로 장소 검색, 경로, 지오코딩을 수행합니다.",
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-google-maps"],
-        "env": {"GOOGLE_MAPS_API_KEY": ""},
+        "env": {"GOOGLE_MAPS_API_KEY": ""},  # nosec B105
         "tags": ["google", "maps", "location", "place", "geocoding", "directions"],
         "source": "curated",
     },
@@ -139,7 +139,7 @@ CURATED_SERVERS: list[dict[str, Any]] = [  # [JS-D003.1]
         "description": "Sentry 이슈와 에러를 조회합니다.",
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-sentry"],
-        "env": {"SENTRY_AUTH_TOKEN": "", "SENTRY_ORG": ""},
+        "env": {"SENTRY_AUTH_TOKEN": "", "SENTRY_ORG": ""},  # nosec B105
         "tags": ["sentry", "error", "monitoring", "debug"],
         "source": "curated",
     },
@@ -149,7 +149,7 @@ CURATED_SERVERS: list[dict[str, Any]] = [  # [JS-D003.1]
         "description": "PostgreSQL 데이터베이스를 조회합니다.",
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-postgres"],
-        "env": {"POSTGRES_CONNECTION_STRING": ""},
+        "env": {"POSTGRES_CONNECTION_STRING": ""},  # nosec B105
         "tags": ["database", "postgres", "postgresql", "sql", "query"],
         "source": "curated",
     },
@@ -158,7 +158,7 @@ CURATED_SERVERS: list[dict[str, Any]] = [  # [JS-D003.1]
         "description": "AI 이미지를 생성합니다.",
         "command": "npx",
         "args": ["-y", "@modelcontextprotocol/server-everart"],
-        "env": {"EVERART_API_KEY": ""},
+        "env": {"EVERART_API_KEY": ""},  # nosec B105
         "tags": ["image", "art", "generation", "ai"],
         "source": "curated",
     },
