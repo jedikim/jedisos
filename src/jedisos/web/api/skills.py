@@ -144,13 +144,13 @@ async def delete_skill(name: str) -> dict[str, str]:
             status_code=404, detail=f"Skill 디렉토리를 찾을 수 없습니다: {skill_path}"
         )
 
-    # 삭제 전 메타정보 보존 (Hindsight 기록용)
+    # 삭제 전 메타정보 보존 (메모리 기록용)
     description = skill.get("description", "")
 
     shutil.rmtree(skill_path)
     logger.info("skill_deleted", name=name, path=str(skill_path))
 
-    # Hindsight에 삭제 이력 기록 (재생성 방지)
+    # 메모리에 삭제 이력 기록 (재생성 방지)
     await _record_skill_deletion(name, description)
 
     return {"status": "deleted", "name": name}
@@ -180,7 +180,7 @@ async def toggle_skill(name: str) -> dict[str, Any]:
 
 
 async def _record_skill_deletion(name: str, description: str) -> None:  # [JS-W007.7]
-    """삭제된 스킬 정보를 Hindsight에 기록합니다.
+    """삭제된 스킬 정보를 메모리에 기록합니다.
 
     SkillGenerator.retain_skill_deletion()을 호출하여 동일 스킬 재생성을 방지합니다.
     메모리 연결 실패 시에도 삭제 자체는 완료됩니다.

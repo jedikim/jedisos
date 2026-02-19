@@ -27,7 +27,7 @@ logger = structlog.get_logger()
 
 app = typer.Typer(
     name="jedisos",
-    help="JediSOS - AI Agent System with Hindsight Memory",
+    help="JediSOS - AI Agent System with zvecsearch Memory",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -52,7 +52,7 @@ def main(
         ),
     ] = None,
 ) -> None:
-    """JediSOS - Hindsight Memory + LangGraph + LiteLLM 기반 AI 비서."""
+    """JediSOS - zvecsearch Memory + LangGraph + LiteLLM 기반 AI 비서."""
 
 
 @app.command()  # [JS-H001.2]
@@ -97,33 +97,30 @@ async def _run_chat(message: str, bank_id: str, model: str | None) -> str:  # [J
 
 
 @app.command()  # [JS-H001.4]
-def health(
-    url: Annotated[
-        str, typer.Option("--url", "-u", help="Hindsight API URL")
-    ] = "http://localhost:8888",
-) -> None:
+def health() -> None:
     """시스템 헬스 체크를 실행합니다."""
-    import httpx
+    from jedisos.core.config import MemoryConfig
 
     table = Table(title="JediSOS Health Check")
     table.add_column("서비스", style="cyan")
     table.add_column("상태", style="bold")
-    table.add_column("URL")
+    table.add_column("경로")
 
     # JediSOS 버전
     table.add_row("JediSOS", f"v{__version__}", "-")
 
-    # Hindsight 체크
+    # ZvecMemory 디렉토리 체크
     try:
-        resp = httpx.get(f"{url}/health", timeout=5)
-        if resp.status_code == 200:
-            table.add_row("Hindsight", "[green]OK[/green]", url)
+        mem_config = MemoryConfig()
+        memory_dir = Path(mem_config.data_dir) / "memory"
+        if memory_dir.exists() and (memory_dir / "MEMORY.md").exists():
+            table.add_row("Memory", "[green]OK[/green]", str(memory_dir))
+        elif memory_dir.exists():
+            table.add_row("Memory", "[yellow]DIR EXISTS (MEMORY.md 없음)[/yellow]", str(memory_dir))
         else:
-            table.add_row("Hindsight", f"[yellow]HTTP {resp.status_code}[/yellow]", url)
-    except httpx.ConnectError:
-        table.add_row("Hindsight", "[red]OFFLINE[/red]", url)
+            table.add_row("Memory", "[red]NOT INITIALIZED[/red]", str(memory_dir))
     except Exception as e:
-        table.add_row("Hindsight", f"[red]ERROR: {e}[/red]", url)
+        table.add_row("Memory", f"[red]ERROR: {e}[/red]", "-")
 
     # Python 버전
     table.add_row(
@@ -155,9 +152,6 @@ def init(
 # API 키 설정
 OPENAI_API_KEY=
 GOOGLE_API_KEY=
-
-# Hindsight 설정
-HINDSIGHT_API_URL=http://localhost:8888
 
 # 보안 설정
 SECURITY_MAX_REQUESTS_PER_MINUTE=30

@@ -1,6 +1,6 @@
 """
 [JS-K006] jedisos.forge.context
-스킬 공유 리소스 - 메인 프로세스의 LLM 라우터 + Hindsight 메모리를 스킬에 제공
+스킬 공유 리소스 - 메인 프로세스의 LLM 라우터 + 메모리를 스킬에 제공
 
 version: 1.0.0
 created: 2026-02-18
@@ -119,7 +119,7 @@ async def memory_retain(  # [JS-K006.5]
     context: str = "",
     bank_id: str | None = None,
 ) -> dict[str, Any]:
-    """Hindsight 메모리에 내용을 저장합니다.
+    """메모리에 내용을 저장합니다.
 
     Args:
         content: 저장할 내용
@@ -127,7 +127,7 @@ async def memory_retain(  # [JS-K006.5]
         bank_id: 메모리 뱅크 ID (기본: "jedisos-skills")
 
     Returns:
-        Hindsight API 응답
+        메모리 API 응답
 
     Raises:
         RuntimeError: 컨텍스트가 초기화되지 않은 경우
@@ -147,14 +147,14 @@ async def memory_recall(  # [JS-K006.6]
     query: str,
     bank_id: str | None = None,
 ) -> dict[str, Any]:
-    """Hindsight 메모리에서 관련 내용을 검색합니다.
+    """메모리에서 관련 내용을 검색합니다.
 
     Args:
         query: 검색 쿼리
         bank_id: 메모리 뱅크 ID (기본: "jedisos-skills")
 
     Returns:
-        검색 결과 (Hindsight API 응답)
+        검색 결과 (메모리 API 응답)
 
     Raises:
         RuntimeError: 컨텍스트가 초기화되지 않은 경우

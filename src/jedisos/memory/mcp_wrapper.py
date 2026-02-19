@@ -1,11 +1,11 @@
 """
 [JS-B003] jedisos.memory.mcp_wrapper
-Hindsight 메모리 MCP 래퍼 - FastMCP 기반 도구 서버
+메모리 MCP 래퍼 - FastMCP 기반 도구 서버
 
 version: 1.0.0
 created: 2026-02-16
 modified: 2026-02-16
-dependencies: fastmcp>=2.14.5, hindsight-client>=0.4.11
+dependencies: fastmcp>=2.14.5
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 
 
 class HindsightMCPWrapper:  # [JS-B003.1]
-    """Hindsight 메모리를 MCP 도구로 노출하는 래퍼.
+    """메모리를 MCP 도구로 노출하는 래퍼.
 
     에이전트가 MCP 프로토콜을 통해 메모리 연산을 호출할 수 있도록 합니다.
     """

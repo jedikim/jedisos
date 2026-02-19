@@ -1,6 +1,6 @@
 """
 [JS-K001] jedisos.forge.generator
-LLM 기반 Skill 코드 생성기 - 멀티 웹 검색 + 페이지 크롤링 + Hindsight 스킬 메모리 + 에러 피드백 루프
+LLM 기반 Skill 코드 생성기 - 멀티 웹 검색 + 페이지 크롤링 + 스킬 메모리 + 에러 피드백 루프
 
 version: 1.5.0
 created: 2026-02-18
@@ -151,7 +151,7 @@ class SkillGenerator:  # [JS-K001.3]
     """LLM + Jinja2를 사용한 Skill 코드 생성기.
 
     멀티 웹 검색으로 참조 코드를 확보하고, 주요 URL의 페이지 본문을 크롤링하여
-    실제 코드 예제를 추출합니다. Hindsight 메모리에서 기존/삭제된 스킬을 검색하여
+    실제 코드 예제를 추출합니다. 메모리에서 기존/삭제된 스킬을 검색하여
     LLM 코드 생성 품질을 높입니다. 실패 시 에러 피드백을 포함한 재시도를 합니다.
     """
 
@@ -189,7 +189,7 @@ class SkillGenerator:  # [JS-K001.3]
         Returns:
             GenerationResult: 생성 결과
         """
-        # 사전 조사: 웹 검색 + Hindsight 스킬 메모리
+        # 사전 조사: 웹 검색 + 스킬 메모리
         reference_code = await self._search_web(request)
         skill_memory_context = await self._search_similar_skills(request)
 
@@ -302,7 +302,7 @@ class SkillGenerator:  # [JS-K001.3]
                     tool_count=len(tools),
                 )
 
-                # 6. 성공: Hindsight에 스킬 정보 기록
+                # 6. 성공: 메모리에 스킬 정보 기록
                 await self._retain_skill_memory(
                     tool_name=tool_name,
                     description=spec.get("description", ""),
@@ -517,7 +517,7 @@ class SkillGenerator:  # [JS-K001.3]
         return reference
 
     async def _search_similar_skills(self, request: str) -> str:  # [JS-K001.10]
-        """Hindsight에서 기존/삭제된 유사 스킬을 검색합니다.
+        """메모리에서 기존/삭제된 유사 스킬을 검색합니다.
 
         Args:
             request: 사용자 요청
@@ -533,7 +533,7 @@ class SkillGenerator:  # [JS-K001.3]
                 query=f"skill: {request}",
                 bank_id=SKILL_MEMORY_BANK,
             )
-            # Hindsight recall 응답에서 컨텍스트 추출 (dict/RecallResponse 모두 지원)
+            # recall 응답에서 컨텍스트 추출 (dict/RecallResponse 모두 지원)
             context = ""
             if isinstance(result, dict):
                 context = result.get("context", "")
@@ -561,7 +561,7 @@ class SkillGenerator:  # [JS-K001.3]
         tags: list[str],
         code: str,
     ) -> None:
-        """생성된 스킬 정보를 Hindsight에 저장합니다.
+        """생성된 스킬 정보를 메모리에 저장합니다.
 
         Args:
             tool_name: 스킬 이름
@@ -596,7 +596,7 @@ class SkillGenerator:  # [JS-K001.3]
         tool_name: str,
         description: str = "",
     ) -> None:
-        """삭제된 스킬 정보를 Hindsight에 기록합니다.
+        """삭제된 스킬 정보를 메모리에 기록합니다.
 
         이 정보는 향후 유사 스킬 생성 요청 시 '이미 삭제된 스킬'로 참조됩니다.
 
@@ -639,7 +639,7 @@ class SkillGenerator:  # [JS-K001.3]
             request: 사용자 요청
             reference_code: 웹 검색으로 찾은 참조 코드/문서
             error_context: 이전 시도의 에러 메시지 (재시도 시)
-            skill_memory: Hindsight에서 검색된 유사 스킬 정보
+            skill_memory: 메모리에서 검색된 유사 스킬 정보
         """
         import litellm
 

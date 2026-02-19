@@ -32,7 +32,7 @@ def create_mcp_server(  # [JS-D001.1]
     """JediSOS MCP 서버를 생성합니다.
 
     Args:
-        memory: Hindsight 메모리 인스턴스 (None이면 메모리 도구 비활성화)
+        memory: 메모리 인스턴스 (None이면 메모리 도구 비활성화)
         name: 서버 이름
         version: 서버 버전
 

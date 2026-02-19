@@ -484,7 +484,7 @@ def _register_builtin_tools(  # [JS-W001.10]
             _app_state.pop("_cached_agent", None)
             clear_all_history()
 
-            # Hindsight에 삭제 기록
+            # 메모리에 삭제 기록
             try:
                 await generator.retain_skill_deletion(tool_name=skill_name, description=description)
             except Exception as e:

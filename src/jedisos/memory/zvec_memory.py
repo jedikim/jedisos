@@ -2,7 +2,7 @@
 [JS-B001] jedisos.memory.zvec_memory
 zvecsearch 기반 마크다운 메모리 시스템
 
-HindsightMemory와 동일한 인터페이스를 제공합니다.
+Hindsight 호환 인터페이스를 제공합니다.
 retain/recall/reflect 세 가지 핵심 연산:
 - retain: 대화 내용을 마크다운으로 저장 + 인덱싱
 - recall: 하이브리드 검색 (dense+sparse+reranker)
@@ -48,7 +48,7 @@ except ImportError:
 class ZvecMemory:  # [JS-B001.1]
     """zvecsearch 기반 마크다운 메모리 시스템.
 
-    HindsightMemory와 동일한 인터페이스를 제공합니다:
+    Hindsight 호환 인터페이스를 제공합니다:
     - retain(): 대화 내용 저장 + 인덱싱
     - recall(): 하이브리드 검색
     - reflect(): 오래된 로그 요약/압축
