@@ -3,14 +3,15 @@
 # JediSOS one-click install script
 # Usage: curl -sSL https://raw.githubusercontent.com/jedikim/jedisos/main/scripts/install.sh | bash
 #
-# version: 4.0.0
+# version: 5.0.0
 # created: 2026-02-18
-# modified: 2026-02-18
+# modified: 2026-02-19
 
 set -euo pipefail
 
 JEDISOS_HOME="${JEDISOS_HOME:-$HOME/.jedisos}"
 REPO_URL="https://github.com/jedikim/jedisos.git"
+ZVEC_WHEEL_URL="https://github.com/jedikim/jedisos/releases/download/zvec-0.2.1.dev0/zvec-0.2.1.dev0-cp312-cp312-linux_x86_64.whl"
 
 echo ""
 echo "  ╔══════════════════════════════════╗"
@@ -64,11 +65,21 @@ fi
 
 mkdir -p config
 
-# 4. Docker build + start
+# 4. Download zvec wheel (GitHub Release)
+mkdir -p dist
+if [ ! -f dist/zvec-*.whl ]; then
+    echo "[..] Downloading zvec wheel..."
+    curl -sSL -o dist/zvec-0.2.1.dev0-cp312-cp312-linux_x86_64.whl "$ZVEC_WHEEL_URL"
+    echo "[ok] zvec wheel downloaded"
+else
+    echo "[ok] zvec wheel found"
+fi
+
+# 5. Docker build + start
 echo "[..] Building and starting (3-7 min on first run)..."
 docker compose up -d --build
 
-# 5. Wait for health check
+# 6. Wait for health check
 echo "[..] Waiting for JediSOS to start..."
 for i in $(seq 1 30); do
     if curl -s http://localhost:8866/health > /dev/null 2>&1; then
@@ -77,7 +88,7 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-# 6. Done
+# 7. Done
 echo ""
 echo "  ╔══════════════════════════════════╗"
 echo "  ║  JediSOS is ready!               ║"
@@ -90,7 +101,7 @@ echo "  Start:  cd $JEDISOS_HOME && docker compose up -d"
 echo "  Update: cd $JEDISOS_HOME && git pull && docker compose up -d --build"
 echo ""
 
-# 7. Open browser
+# 8. Open browser
 if command -v open &> /dev/null; then
     open "http://localhost:8866"
 elif command -v xdg-open &> /dev/null; then
