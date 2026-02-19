@@ -173,11 +173,12 @@ def _skill_func_to_openai_def(func: Any) -> dict[str, Any]:  # [JS-W001.12]
     }
 
 
-def _register_builtin_tools(  # [JS-W001.10]
+async def _register_builtin_tools(  # [JS-W001.10]
     memory: Any,
     llm: Any,
+    mcp_manager: Any | None = None,
 ) -> tuple[list[Any], Any]:
-    """내장 도구 + 생성된 Skill을 등록합니다.
+    """내장 도구 + 생성된 Skill + MCP 도구를 등록합니다.
 
     Returns:
         (tool_definitions, tool_executor) 튜플
@@ -291,12 +292,104 @@ def _register_builtin_tools(  # [JS-W001.10]
                 },
             },
         },
+        {
+            "type": "function",
+            "function": {
+                "name": "search_mcp_servers",
+                "description": (
+                    "MCP 서버를 검색합니다. "
+                    "기본 source='registry'는 큐레이티드 인기 서버 + npm + PyPI를 검색합니다. "
+                    "결과가 부족하면 source='mcp_so'로 mcp.so(17,600+ 서버)를 폴백 검색하세요. "
+                    "검색 결과에서 사용자가 선택하면 add_mcp_server로 등록+실행합니다."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "검색어 (예: 'weather', 'github', 'database')",
+                        },
+                        "source": {
+                            "type": "string",
+                            "description": "검색 소스: 'registry'(기본, 큐레이티드+npm+pypi) 또는 'mcp_so'(mcp.so 폴백)",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "add_mcp_server",
+                "description": (
+                    "새 MCP 서버를 등록하고 연결합니다. "
+                    "두 가지 방식을 지원합니다: "
+                    "1) remote: 이미 실행 중인 서버의 URL을 등록 (url 필수). "
+                    "2) subprocess: 명령어로 서버를 직접 실행 "
+                    "(server_type='subprocess', command/args 필수, "
+                    "예: command='npx', args=['-y', '@modelcontextprotocol/server-fetch'])."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "서버 이름 (영문, 밑줄 허용)"},
+                        "server_type": {
+                            "type": "string",
+                            "description": "서버 타입: 'remote'(URL 접속) 또는 'subprocess'(프로세스 실행)",
+                        },
+                        "url": {
+                            "type": "string",
+                            "description": "서버 URL (remote 타입용, 예: http://localhost:8001/mcp)",
+                        },
+                        "command": {
+                            "type": "string",
+                            "description": "실행 명령어 (subprocess 타입용, 예: 'npx', 'uvx', 'python')",
+                        },
+                        "args": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "명령어 인자 (subprocess 타입용, 예: ['-y', '@mcp/server-fetch'])",
+                        },
+                        "env": {
+                            "type": "object",
+                            "description": "환경변수 (subprocess 타입용, 예: {'API_KEY': 'xxx'})",
+                        },
+                        "description": {"type": "string", "description": "서버 설명"},
+                    },
+                    "required": ["name"],
+                },
+            },
+        },
     ]
 
     # 생성된 스킬의 OpenAI 정의 추가
     skill_defs = [_skill_func_to_openai_def(func) for func in skill_registry.values()]
 
-    all_defs = builtin_defs + skill_defs
+    # MCP 도구 수집 + OpenAI function def 변환
+    mcp_tool_map: dict[str, tuple[str, str]] = {}  # tool_name → (server_name, original_name)
+    mcp_defs: list[dict[str, Any]] = []
+
+    if mcp_manager:
+        for server_name in mcp_manager.connected_servers:
+            tools = await mcp_manager.list_tools(server_name)
+            for tool in tools:
+                tool_name = f"mcp_{server_name}_{tool['name']}"
+                mcp_tool_map[tool_name] = (server_name, tool["name"])
+                mcp_defs.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "description": f"[MCP:{server_name}] {tool['description']}",
+                            "parameters": tool.get(
+                                "parameters", {"type": "object", "properties": {}}
+                            ),
+                        },
+                    }
+                )
+
+    all_defs = builtin_defs + skill_defs + mcp_defs
     wrapped_tools = [ToolDef(td) for td in all_defs]
 
     # 도구 실행기
@@ -588,6 +681,101 @@ def _register_builtin_tools(  # [JS-W001.10]
                 "message": f"'{skill_name}' 스킬을 업그레이드 중입니다. 잠시 후 완료됩니다.",
             }
 
+        # search_mcp_servers — MCP 서버 검색 (큐레이티드+npm+pypi / mcp.so 폴백)
+        elif name == "search_mcp_servers":
+            from jedisos.mcp.registry import search_all
+
+            query = arguments.get("query", "")
+            source = arguments.get("source", "registry")
+            if not query:
+                return {"error": "검색어를 입력해주세요."}
+            try:
+                return await search_all(query, source=source)
+            except Exception as e:
+                logger.error("mcp_search_failed", query=query, error=str(e))
+                return {"error": f"MCP 서버 검색 오류: {e}"}
+
+        # add_mcp_server — LLM이 MCP 서버를 등록+연결 (remote/subprocess)
+        elif name == "add_mcp_server":
+            srv_name = arguments.get("name", "")
+            srv_type = arguments.get("server_type", "remote")
+            srv_url = arguments.get("url", "")
+            srv_cmd = arguments.get("command", "")
+            srv_args = arguments.get("args", [])
+            srv_env = arguments.get("env", {})
+            srv_desc = arguments.get("description", "")
+
+            if not srv_name:
+                return {"error": "서버 이름을 입력해주세요."}
+            if srv_type == "remote" and not srv_url:
+                return {"error": "remote 타입은 URL이 필수입니다."}
+            if srv_type == "subprocess" and not srv_cmd:
+                return {"error": "subprocess 타입은 command가 필수입니다."}
+
+            if not mcp_manager:
+                return {"error": "MCP 매니저가 초기화되지 않았습니다."}
+
+            # config 파일에 저장
+            from jedisos.web.api.mcp import _load_mcp_config, _save_mcp_config
+
+            config = _load_mcp_config()
+            servers = config.get("servers", [])
+            if any(s["name"] == srv_name for s in servers):
+                return {"error": f"'{srv_name}' 서버가 이미 등록되어 있습니다."}
+
+            entry: dict[str, Any] = {
+                "name": srv_name,
+                "url": srv_url,
+                "description": srv_desc,
+                "enabled": True,
+                "server_type": srv_type,
+            }
+            if srv_type == "subprocess":
+                entry["command"] = srv_cmd
+                entry["args"] = srv_args
+                entry["env"] = srv_env
+            servers.append(entry)
+            config["servers"] = servers
+            _save_mcp_config(config)
+
+            # 런타임 등록+연결
+            await mcp_manager.register_server(
+                srv_name,
+                url=srv_url,
+                server_type=srv_type,
+                command=srv_cmd,
+                args=srv_args,
+                env=srv_env,
+            )
+            connected = await mcp_manager.connect(srv_name)
+
+            # 새 도구 목록 가져와서 등록
+            if connected:
+                tools = await mcp_manager.list_tools(srv_name)
+                for tool in tools:
+                    t_name = f"mcp_{srv_name}_{tool['name']}"
+                    mcp_tool_map[t_name] = (srv_name, tool["name"])
+                    new_def = {
+                        "type": "function",
+                        "function": {
+                            "name": t_name,
+                            "description": f"[MCP:{srv_name}] {tool['description']}",
+                            "parameters": tool.get(
+                                "parameters", {"type": "object", "properties": {}}
+                            ),
+                        },
+                    }
+                    wrapped_tools.append(ToolDef(new_def))
+                _app_state.pop("_cached_agent", None)
+
+            logger.info(
+                "mcp_server_added_by_agent",
+                name=srv_name,
+                server_type=srv_type,
+                connected=connected,
+            )
+            return {"status": "registered", "connected": connected, "name": srv_name}
+
         # 동적 스킬 실행
         elif name in skill_registry:
             try:
@@ -596,6 +784,16 @@ def _register_builtin_tools(  # [JS-W001.10]
             except Exception as e:
                 logger.error("skill_execution_failed", skill=name, error=str(e))
                 return {"error": f"스킬 실행 오류: {e}"}
+
+        # MCP 도구 실행
+        elif name in mcp_tool_map:
+            server_name, original_tool_name = mcp_tool_map[name]
+            try:
+                result = await mcp_manager.call_tool(server_name, original_tool_name, arguments)
+                return result
+            except Exception as e:
+                logger.error("mcp_tool_exec_failed", tool=name, error=str(e))
+                return {"error": f"MCP 도구 실행 오류: {e}"}
 
         return {"error": f"알 수 없는 도구: {name}"}
 
@@ -606,6 +804,7 @@ def _register_builtin_tools(  # [JS-W001.10]
         "tools_registered",
         builtin=len(builtin_defs),
         skills=len(skill_defs),
+        mcp=len(mcp_defs),
         total=len(all_defs),
     )
     return wrapped_tools, tool_executor
@@ -760,8 +959,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # [JS-W001.1]
     _app_state["pdp"] = pdp
     _app_state["audit"] = audit
 
-    # 내장 도구 등록 (ZvecMemory + Forge 스킬 생성)
-    builtin_tools, tool_executor = _register_builtin_tools(memory, llm)
+    # MCP 클라이언트 매니저 초기화 + 서버 연결
+    from jedisos.mcp.client import MCPClientManager
+
+    mcp_manager = MCPClientManager()
+    mcp_config_path = data_dir / "config" / "mcp_servers.json"
+    if mcp_config_path.exists():
+        import json as _json
+
+        mcp_cfg = _json.loads(mcp_config_path.read_text())
+        for srv in mcp_cfg.get("servers", []):
+            if srv.get("enabled", True):
+                srv_type = srv.get("server_type", "remote")
+                await mcp_manager.register_server(
+                    srv["name"],
+                    url=srv.get("url", ""),
+                    server_type=srv_type,
+                    command=srv.get("command", ""),
+                    args=srv.get("args", []),
+                    env=srv.get("env", {}),
+                )
+        conn_results = await mcp_manager.connect_all()
+        logger.info("mcp_servers_connected", results=conn_results)
+
+    _app_state["mcp_manager"] = mcp_manager
+
+    # 내장 도구 등록 (ZvecMemory + Forge 스킬 + MCP 도구)
+    builtin_tools, tool_executor = await _register_builtin_tools(memory, llm, mcp_manager)
     _app_state["builtin_tools"] = builtin_tools
     _app_state["tool_executor"] = tool_executor
 
@@ -773,6 +997,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # [JS-W001.1]
 
     # 종료 시 채널 봇 정리
     await _stop_channels()
+
+    # MCP 서버 연결 해제
+    mcp_mgr = _app_state.get("mcp_manager")
+    if mcp_mgr:
+        await mcp_mgr.disconnect_all()
 
     # SecVault 데몬 종료
     vault_proc = _app_state.get("vault_process")

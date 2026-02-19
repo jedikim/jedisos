@@ -11,6 +11,7 @@ dependencies: fastapi>=0.115
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -22,24 +23,32 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
-_MCP_CONFIG_PATH = Path("config/mcp_servers.json")
+_MCP_CONFIG_PATH = Path(os.environ.get("JEDISOS_DATA_DIR", ".")) / "config" / "mcp_servers.json"
 
 
 class MCPServerInfo(BaseModel):  # [JS-W004.1]
     """MCP 서버 정보 모델."""
 
     name: str
-    url: str
+    url: str = ""
     description: str = ""
     enabled: bool = True
+    server_type: str = "remote"  # "remote" 또는 "subprocess"
+    command: str = ""
+    args: list[str] = []
+    env: dict[str, str] = {}
 
 
 class MCPServerInstall(BaseModel):  # [JS-W004.2]
     """MCP 서버 설치 요청."""
 
     name: str
-    url: str
+    url: str = ""
     description: str = ""
+    server_type: str = "remote"
+    command: str = ""
+    args: list[str] = []
+    env: dict[str, str] = {}
 
 
 def _load_mcp_config() -> dict[str, Any]:  # [JS-W004.3]
@@ -75,14 +84,18 @@ async def install_server(request: MCPServerInstall) -> dict[str, str]:
                 status_code=409, detail=f"서버 '{request.name}'이(가) 이미 설치되어 있습니다."
             )
 
-    servers.append(
-        {
-            "name": request.name,
-            "url": request.url,
-            "description": request.description,
-            "enabled": True,
-        }
-    )
+    entry: dict[str, Any] = {
+        "name": request.name,
+        "url": request.url,
+        "description": request.description,
+        "enabled": True,
+        "server_type": request.server_type,
+    }
+    if request.server_type == "subprocess":
+        entry["command"] = request.command
+        entry["args"] = request.args
+        entry["env"] = request.env
+    servers.append(entry)
     config["servers"] = servers
     _save_mcp_config(config)
 
