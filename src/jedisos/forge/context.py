@@ -51,6 +51,7 @@ async def llm_complete(  # [JS-K006.3]
     system: str = "",
     temperature: float = 0.7,
     max_tokens: int = 1024,
+    role: str = "chat",
 ) -> str:
     """LLM 텍스트 완성. 메인 프로세스의 API 키와 모델 폴백 체인을 사용합니다.
 
@@ -59,6 +60,7 @@ async def llm_complete(  # [JS-K006.3]
         system: 시스템 프롬프트 (선택)
         temperature: 0.0~1.5 (범위 밖이면 클램핑)
         max_tokens: 최대 토큰 수 (2048 상한)
+        role: LLM 역할 (reason|code|chat|classify|extract)
 
     Returns:
         LLM 응답 텍스트
@@ -78,6 +80,7 @@ async def llm_complete(  # [JS-K006.3]
         system=system,
         temperature=temperature,
         max_tokens=max_tokens,
+        role=role,
     )
 
 
@@ -85,6 +88,7 @@ async def llm_chat(  # [JS-K006.4]
     messages: list[dict[str, str]],
     temperature: float = 0.7,
     max_tokens: int = 1024,
+    role: str = "chat",
 ) -> str:
     """LLM 멀티턴 채팅.
 
@@ -92,6 +96,7 @@ async def llm_chat(  # [JS-K006.4]
         messages: 대화 메시지 리스트. [{"role": "user", "content": "..."}, ...]
         temperature: 0.0~1.5 (범위 밖이면 클램핑)
         max_tokens: 최대 토큰 수 (2048 상한)
+        role: LLM 역할 (reason|code|chat|classify|extract)
 
     Returns:
         어시스턴트 응답 텍스트
@@ -110,6 +115,7 @@ async def llm_chat(  # [JS-K006.4]
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
+        role=role,
     )
     return result["choices"][0]["message"]["content"]
 

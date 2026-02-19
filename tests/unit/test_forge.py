@@ -794,6 +794,7 @@ class TestSkillContext:  # [JS-T012.6]
             system="요약기",
             temperature=0.7,
             max_tokens=1024,
+            role="chat",
         )
         self._reset_context()
 

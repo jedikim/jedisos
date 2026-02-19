@@ -125,7 +125,7 @@ class ReActAgent:  # [JS-E001.2]
             result = await asyncio.wait_for(
                 self.memory.recall(query, bank_id=state.get("bank_id")), timeout=3.0
             )
-            context = str(result) if result else ""
+            context = result.get("context", "") if isinstance(result, dict) else str(result)
         except TimeoutError:
             logger.warning("recall_timeout", bank_id=state.get("bank_id"))
             context = ""
@@ -313,11 +313,16 @@ class ReActAgent:  # [JS-E001.2]
         return {"error": f"도구 '{name}'의 실행기가 설정되지 않았습니다."}
 
     async def _retain_memory(self, state: AgentState) -> dict:  # [JS-E001.8]
-        """대화 내용을 메모리에 저장 (백그라운드, 응답 블로킹 없음)."""
-        conversation = "\n".join(
-            f"{role}: {content}"
-            for role, content in (_extract_msg_role_content(m) for m in state["messages"])
-        )
+        """대화 내용을 메모리에 저장 (백그라운드, 현재 턴만)."""
+        # 마지막 user+assistant 턴만 저장 (눈덩이 방지)
+        parts: list[str] = []
+        for msg in reversed(state["messages"]):
+            role, content = _extract_msg_role_content(msg)
+            if role in ("user", "assistant") and content:
+                parts.append(f"{role}: {content}")
+                if role == "user":
+                    break
+        conversation = "\n".join(reversed(parts))
 
         async def _bg_retain() -> None:
             try:
@@ -383,7 +388,7 @@ class ReActAgent:  # [JS-E001.2]
         memory_context = ""
         try:
             result = await asyncio.wait_for(self.memory.recall(query, bank_id=bid), timeout=3.0)
-            memory_context = str(result) if result else ""
+            memory_context = result.get("context", "") if isinstance(result, dict) else str(result)
         except TimeoutError:
             logger.warning("recall_timeout", bank_id=bid)
         except Exception as e:
@@ -405,6 +410,29 @@ class ReActAgent:  # [JS-E001.2]
 
         tool_defs = [t.to_dict() for t in self.tools] if self.tools else None
 
+        # 2.5. 의도 분류 (소형 모델 — 저렴/빠름)
+        llm_role = "chat"
+        try:
+            intent = await self.llm.complete_text(
+                prompt=f"사용자: {user_message}",
+                system=(
+                    "사용자 메시지의 의도를 한 단어로만 분류하세요. "
+                    "선택지: chat, question, remember, skill_request, complex\n"
+                    "한 단어만 답하세요."
+                ),
+                role="classify",
+                max_tokens=10,
+                temperature=0.0,
+            )
+            intent = intent.strip().lower().split()[0] if intent else "chat"
+            if intent == "complex":
+                llm_role = "reason"
+            elif intent == "skill_request":
+                llm_role = "code"
+            logger.info("intent_classified", intent=intent, llm_role=llm_role)
+        except Exception as e:
+            logger.debug("intent_classify_failed", error=str(e))
+
         # 3. 스트리밍 LLM 호출
         #    - 텍스트 응답: 토큰 즉시 yield (실시간 스트리밍)
         #    - 도구 호출: 델타 누적 → 실행 → 다시 스트리밍 호출
@@ -416,7 +444,7 @@ class ReActAgent:  # [JS-E001.2]
             tool_calls_map: dict[int, dict[str, str]] = {}
             has_tool_calls = False
 
-            async for chunk in self.llm.stream(llm_messages, tools=tool_defs):
+            async for chunk in self.llm.stream(llm_messages, tools=tool_defs, role=llm_role):
                 choices = chunk.get("choices", [])
                 if not choices:
                     continue
@@ -477,13 +505,11 @@ class ReActAgent:  # [JS-E001.2]
                 )
                 logger.info("tool_executed", tool=tool_name, call_id=tool_id)
 
-        # 4. retain_memory (백그라운드) — 어시스턴트 응답 포함
-        retain_messages = list(messages)
+        # 4. retain_memory (백그라운드) — 현재 턴만 저장 (눈덩이 방지)
+        retain_parts = [f"user: {user_message}"]
         if content:
-            retain_messages.append({"role": "assistant", "content": content})
-        full_conversation = "\n".join(
-            f"{msg.get('role', 'unknown')}: {msg.get('content', '')}" for msg in retain_messages
-        )
+            retain_parts.append(f"assistant: {content}")
+        full_conversation = "\n".join(retain_parts)
 
         async def _bg_retain() -> None:
             try:

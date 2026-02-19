@@ -96,7 +96,7 @@ class TestRecallMemory:  # [JS-T005.3]
             react_agent.memory,
             "recall",
             new_callable=AsyncMock,
-            return_value={"response": "기억 내용"},
+            return_value={"context": "기억 내용"},
         ):
             result = await react_agent._recall_memory(state)
             assert result["memory_context"] != ""

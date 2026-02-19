@@ -36,8 +36,29 @@ class LLMRouter:  # [JS-C001.1]
     def __init__(self, config: LLMConfig | None = None) -> None:
         self.config = config or LLMConfig()
         self._models = self._load_models()
+        self._role_models: dict[str, str] = {}
         litellm.set_verbose = False
         logger.info("llm_router_init", models=self._models)
+
+    def set_role_models(self, mapping: dict[str, str]) -> None:  # [JS-C001.6]
+        """역할별 모델 매핑을 설정합니다.
+
+        Args:
+            mapping: {"reason": "gpt-5.2", "chat": "gemini/...", ...}
+        """
+        self._role_models = dict(mapping)
+        logger.info("llm_role_models_set", mapping=self._role_models)
+
+    def model_for(self, role: str) -> str | None:  # [JS-C001.7]
+        """역할에 맞는 모델을 반환합니다.
+
+        Args:
+            role: reason|code|chat|classify|extract
+
+        Returns:
+            모델 ID 또는 None (미설정 시)
+        """
+        return self._role_models.get(role)
 
     def _load_models(self) -> list[str]:  # [JS-C001.2]
         """모델 목록을 로드합니다. YAML 파일 우선, 없으면 config.models 사용."""
@@ -56,6 +77,7 @@ class LLMRouter:  # [JS-C001.1]
         messages: list[dict[str, str]],
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
+        role: str | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """LLM 호출 (폴백 체인 포함).
@@ -64,10 +86,13 @@ class LLMRouter:  # [JS-C001.1]
             messages: 대화 메시지 리스트
             tools: 사용 가능한 도구 정의 (선택)
             model: 특정 모델 지정 (None이면 폴백 체인 사용)
+            role: 역할 (reason|code|chat|classify|extract) — model 미지정 시 사용
 
         Returns:
             LLM 응답 딕셔너리
         """
+        if not model and role:
+            model = self.model_for(role)
         models = [model] if model else self._models
         last_error: Exception | None = None
 
@@ -82,6 +107,10 @@ class LLMRouter:  # [JS-C001.1]
                 }
                 if tools:
                     call_kwargs["tools"] = tools
+                # Forward extra litellm params (response_format, etc.)
+                for k in ("response_format",):
+                    if k in kwargs:
+                        call_kwargs[k] = kwargs[k]
 
                 response = await litellm.acompletion(**call_kwargs)
                 logger.info("llm_call_success", model=m)
@@ -98,12 +127,15 @@ class LLMRouter:  # [JS-C001.1]
         messages: list[dict[str, str]],
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
+        role: str | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any]]:
         """LLM 스트리밍 호출. 토큰 단위로 청크를 yield합니다.
 
         tool_calls가 포함된 응답은 스트리밍하지 않고 complete()로 폴백합니다.
         """
+        if not model and role:
+            model = self.model_for(role)
         models = [model] if model else self._models
         last_error: Exception | None = None
 

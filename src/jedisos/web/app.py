@@ -189,7 +189,7 @@ def _register_builtin_tools(  # [JS-W001.10]
 
     data_dir = _Path(os.environ.get("JEDISOS_DATA_DIR", "."))
     generated_dir = data_dir / "tools" / "generated"
-    generator = SkillGenerator(output_dir=generated_dir, memory=memory)
+    generator = SkillGenerator(output_dir=generated_dir, memory=memory, llm_router=llm)
 
     # 동적 스킬 레지스트리: name → callable
     skill_registry: dict[str, Any] = {}
@@ -727,6 +727,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # [JS-W001.1]
     else:
         _app_state["vault_status"] = "unavailable"
         logger.warning("secvault_daemon_not_ready")
+
+    # 멀티티어 LLM 자동 구성 (모델 조회 → 역할 배정)
+    try:
+        from jedisos.llm.auto_config import auto_configure_roles
+
+        role_mapping = await auto_configure_roles(llm, data_dir=str(data_dir))
+        llm.set_role_models(role_mapping)
+    except Exception as e:
+        logger.warning("auto_config_failed_using_defaults", error=str(e))
 
     # 스킬 공유 컨텍스트 초기화 (LLM + 메모리를 스킬에서 사용 가능하게)
     from jedisos.forge.context import initialize as init_skill_context

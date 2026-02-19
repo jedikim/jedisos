@@ -111,19 +111,27 @@ def append_to_memory(  # [JS-B005.5]
 ) -> None:
     """MEMORY.md에 사실/선호도를 추가합니다.
 
+    중복 방지: 동일한 fact 문자열이 이미 있으면 추가하지 않습니다.
+
     Args:
         path: MEMORY.md 경로
         fact: 추가할 사실
         source: 출처 (bank_id 등)
         timestamp: 타임스탬프
     """
+    ensure_file(path, "# 메모리\n\n영구 사실과 선호도가 기록됩니다.\n\n")
+
+    # 중복 체크
+    existing = read_file(path)
+    if fact in existing:
+        logger.debug("memory_fact_duplicate", fact=fact[:50])
+        return
+
     ts = timestamp or datetime.now()
     date_str = ts.strftime("%Y-%m-%d")
     source_part = f" (from: {source})" if source else ""
 
     line = f"- [{date_str}] {fact}{source_part}\n"
-
-    ensure_file(path, "# 메모리\n\n영구 사실과 선호도가 기록됩니다.\n\n")
 
     with open(path, "a", encoding="utf-8") as f:
         f.write(line)

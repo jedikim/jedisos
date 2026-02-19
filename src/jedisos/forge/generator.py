@@ -160,6 +160,7 @@ class SkillGenerator:  # [JS-K001.3]
         output_dir: Path | None = None,
         max_retries: int = 3,
         memory: ZvecMemory | None = None,
+        llm_router: Any | None = None,
     ) -> None:
         self.output_dir = output_dir or Path("tools/generated")
         self.max_retries = max_retries
@@ -167,6 +168,7 @@ class SkillGenerator:  # [JS-K001.3]
         self.tool_loader = ToolLoader()
         self.tester = SkillTester()
         self.memory = memory
+        self.llm_router = llm_router
 
         # Jinja2 환경 설정
         template_dir = Path(__file__).parent / "templates"
@@ -350,19 +352,30 @@ class SkillGenerator:  # [JS-K001.3]
         Returns:
             검색 쿼리 리스트 (2-3개)
         """
-        import litellm
-
         try:
-            response = await litellm.acompletion(
-                model="gpt-5.2",
-                messages=[
-                    {"role": "user", "content": QUERY_GEN_PROMPT.format(request=request)},
-                ],
-                temperature=0.2,
-                max_tokens=200,
-                response_format={"type": "json_object"},
-            )
-            content = response.choices[0].message.content
+            messages = [
+                {"role": "user", "content": QUERY_GEN_PROMPT.format(request=request)},
+            ]
+            if self.llm_router:
+                result = await self.llm_router.complete(
+                    messages=messages,
+                    role="extract",
+                    temperature=0.2,
+                    max_tokens=200,
+                    response_format={"type": "json_object"},
+                )
+                content = result["choices"][0]["message"]["content"]
+            else:
+                import litellm
+
+                response = await litellm.acompletion(
+                    model="gpt-5.2",
+                    messages=messages,
+                    temperature=0.2,
+                    max_tokens=200,
+                    response_format={"type": "json_object"},
+                )
+                content = response.choices[0].message.content
             data = json.loads(content)
             # JSON 배열이 바로 올 수도 있고, {"queries": [...]} 형태일 수도 있음
             if isinstance(data, list):
@@ -641,8 +654,6 @@ class SkillGenerator:  # [JS-K001.3]
             error_context: 이전 시도의 에러 메시지 (재시도 시)
             skill_memory: 메모리에서 검색된 유사 스킬 정보
         """
-        import litellm
-
         # 참조 코드 섹션 구성
         reference_section = ""
         if reference_code:
@@ -683,13 +694,25 @@ class SkillGenerator:  # [JS-K001.3]
         )
 
         try:
-            response = await litellm.acompletion(
-                model="gpt-5.2",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                response_format={"type": "json_object"},
-            )
-            content = response.choices[0].message.content
+            messages = [{"role": "user", "content": prompt}]
+            if self.llm_router:
+                result = await self.llm_router.complete(
+                    messages=messages,
+                    role="code",
+                    temperature=0.3,
+                    response_format={"type": "json_object"},
+                )
+                content = result["choices"][0]["message"]["content"]
+            else:
+                import litellm
+
+                response = await litellm.acompletion(
+                    model="gpt-5.2",
+                    messages=messages,
+                    temperature=0.3,
+                    response_format={"type": "json_object"},
+                )
+                content = response.choices[0].message.content
             return json.loads(content)
         except Exception as e:
             logger.error("skill_gen_llm_error", error=str(e))
