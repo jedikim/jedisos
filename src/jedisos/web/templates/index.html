@@ -561,11 +561,18 @@ modified: 2026-02-18
                         </button>
                     </div>
 
-                    <div x-show="!settings.llm.roles || Object.keys(settings.llm.roles).length === 0" class="p-8 text-center text-gray-500 text-sm">
-                        역할별 모델이 아직 구성되지 않았습니다. '자동 재구성' 버튼을 눌러주세요.
+                    <div x-show="settings.llm.rolesLoading" class="p-8 text-center">
+                        <div class="flex flex-col items-center gap-3">
+                            <div class="loading-spinner"></div>
+                            <p class="text-sm text-gray-500">모델 자동 구성 중... 잠시만 기다려주세요</p>
+                            <p class="text-xs text-gray-400">첫 실행 시 최대 30초 소요됩니다</p>
+                        </div>
+                    </div>
+                    <div x-show="!settings.llm.rolesLoading && (!settings.llm.roles || Object.keys(settings.llm.roles).length === 0)" class="p-8 text-center text-gray-500 text-sm">
+                        역할별 모델이 구성되지 않았습니다. '자동 재구성' 버튼을 눌러주세요.
                     </div>
 
-                    <div x-show="settings.llm.roles && Object.keys(settings.llm.roles).length > 0" class="divide-y divide-gray-200">
+                    <div x-show="!settings.llm.rolesLoading && settings.llm.roles && Object.keys(settings.llm.roles).length > 0" class="divide-y divide-gray-200">
                         <template x-for="role in ['reason', 'code', 'chat', 'classify', 'extract']" :key="role">
                             <div class="p-4">
                                 <div class="flex items-center gap-3 mb-2">
@@ -608,7 +615,7 @@ modified: 2026-02-18
                         </template>
                     </div>
 
-                    <div x-show="settings.llm.roles && Object.keys(settings.llm.roles).length > 0"
+                    <div x-show="!settings.llm.rolesLoading && settings.llm.roles && Object.keys(settings.llm.roles).length > 0"
                          class="p-4 border-t border-gray-200 flex items-center justify-between">
                         <p class="text-xs text-gray-400">각 역할의 1st 모델 실패 시 2nd 모델로 자동 폴백</p>
                         <button @click="saveModelRoles()"

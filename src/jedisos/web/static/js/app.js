@@ -104,6 +104,7 @@ function app() {
                 roles: {},
                 fallback_models: [],
                 reconfiguring: false,
+                rolesLoading: false,
             },
             security: {},
         },
@@ -593,12 +594,10 @@ function app() {
         async loadLLMSettings() {
             try {
                 const data = await this.api('GET', '/api/settings/llm');
-                this.settings.llm = {
-                    models: data.models || [],
-                    temperature: data.temperature ?? 0.7,
-                    max_tokens: data.max_tokens ?? 8192,
-                    timeout: data.timeout ?? 60,
-                };
+                this.settings.llm.models = data.models || [];
+                this.settings.llm.temperature = data.temperature ?? 0.7;
+                this.settings.llm.max_tokens = data.max_tokens ?? 8192;
+                this.settings.llm.timeout = data.timeout ?? 60;
             } catch (e) {
                 console.error('LLM 설정 로드 실패:', e);
             }
@@ -623,15 +622,29 @@ function app() {
 
         /**
          * 역할별 모델 매핑 로드.  [JS-W010.31]
+         * 역할이 비어있으면 2초 간격으로 최대 15회 재시도 (자동 구성 완료 대기).
          */
-        async loadModelRoles() {
+        async loadModelRoles(retryCount = 0) {
+            this.settings.llm.rolesLoading = true;
             try {
                 const data = await this.api('GET', '/api/settings/llm/roles');
                 this.settings.llm.roles = data.roles || {};
                 this.settings.llm.fallback_models = data.fallback_models || [];
+
+                // 역할이 비어있으면 자동 구성 완료 대기 (최대 30초)
+                const hasRoles = Object.values(this.settings.llm.roles).some((v) => v.length > 0);
+                if (!hasRoles && retryCount < 15) {
+                    setTimeout(() => this.loadModelRoles(retryCount + 1), 2000);
+                    return;
+                }
             } catch (e) {
                 console.error('모델 역할 로드 실패:', e);
+                if (retryCount < 15) {
+                    setTimeout(() => this.loadModelRoles(retryCount + 1), 2000);
+                    return;
+                }
             }
+            this.settings.llm.rolesLoading = false;
         },
 
         /**
