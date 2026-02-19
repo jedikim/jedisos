@@ -27,6 +27,8 @@ services:
     volumes:
       - ./config:/config
       - jedisos_data:/data
+      - hf_cache:/root/.cache/huggingface
 
 volumes:
   jedisos_data:
+  hf_cache:
