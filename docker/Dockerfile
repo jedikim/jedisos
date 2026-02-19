@@ -12,6 +12,13 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
+# PyTorch CPU-only 먼저 설치 (CUDA 제거 → ~300MB vs ~1.5GB)
+# 이 레이어는 거의 바뀌지 않으므로 캐시 효율 극대화
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+# sentence-transformers (local embedding) — PyTorch CPU 이미 설치되어 CUDA 안 받음
+RUN pip install --no-cache-dir sentence-transformers
+
 # zvec: AVX-512 이슈 회피 — 커스텀 x86-64-v2 wheel
 COPY dist/zvec-*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/zvec-*.whl
@@ -26,9 +33,6 @@ RUN pip install --no-cache-dir build && \
     python -m build --wheel && \
     pip install --no-cache-dir dist/*.whl && \
     pip install --no-cache-dir "jedisos[channels]"
-
-# sentence-transformers (local embedding)
-RUN pip install --no-cache-dir sentence-transformers
 
 # --- Stage 2: 프로덕션 ---
 FROM python:3.12-slim
