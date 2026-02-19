@@ -96,7 +96,15 @@ function app() {
         // ──────────────────────────────
         settings: {
             env: [],
-            llm: { models: [], temperature: 0.7, max_tokens: 8192, timeout: 60 },
+            llm: {
+                models: [],
+                temperature: 0.7,
+                max_tokens: 8192,
+                timeout: 60,
+                roles: {},
+                fallback_models: [],
+                reconfiguring: false,
+            },
             security: {},
         },
 
@@ -210,6 +218,7 @@ function app() {
             } else if (page === 'settings') {
                 this.loadEnvKeys();
                 this.loadLLMSettings();
+                this.loadModelRoles();
                 this.loadSecuritySettings();
             } else if (page === 'packages') {
                 this.loadSkills();
@@ -596,7 +605,7 @@ function app() {
         },
 
         /**
-         * LLM 설정 저장.  [JS-W010.16]
+         * LLM 파라미터 저장.  [JS-W010.16]
          */
         async saveLLMSettings() {
             try {
@@ -606,9 +615,57 @@ function app() {
                     max_tokens: this.settings.llm.max_tokens,
                     timeout: this.settings.llm.timeout,
                 });
-                this.showToast('LLM 설정 저장 완료');
+                this.showToast('LLM 파라미터 저장 완료');
             } catch (e) {
-                this.showToast('LLM 설정 저장 실패: ' + e.message, 'error');
+                this.showToast('LLM 파라미터 저장 실패: ' + e.message, 'error');
+            }
+        },
+
+        /**
+         * 역할별 모델 매핑 로드.  [JS-W010.31]
+         */
+        async loadModelRoles() {
+            try {
+                const data = await this.api('GET', '/api/settings/llm/roles');
+                this.settings.llm.roles = data.roles || {};
+                this.settings.llm.fallback_models = data.fallback_models || [];
+            } catch (e) {
+                console.error('모델 역할 로드 실패:', e);
+            }
+        },
+
+        /**
+         * 역할별 모델 매핑 저장.  [JS-W010.32]
+         */
+        async saveModelRoles() {
+            try {
+                // 빈 문자열 제거
+                const cleaned = {};
+                for (const [role, models] of Object.entries(this.settings.llm.roles)) {
+                    cleaned[role] = models.filter((m) => m.trim());
+                }
+                await this.api('PUT', '/api/settings/llm/roles', { roles: cleaned });
+                this.showToast('역할별 모델 설정 저장 완료');
+                await this.loadModelRoles();
+            } catch (e) {
+                this.showToast('역할 설정 저장 실패: ' + e.message, 'error');
+            }
+        },
+
+        /**
+         * 모델 자동 재구성.  [JS-W010.33]
+         */
+        async reconfigureModels() {
+            this.settings.llm.reconfiguring = true;
+            try {
+                const data = await this.api('POST', '/api/settings/llm/reconfigure');
+                this.settings.llm.roles = data.roles || {};
+                this.showToast('모델 자동 구성 완료');
+                await this.loadModelRoles();
+            } catch (e) {
+                this.showToast('자동 구성 실패: ' + e.message, 'error');
+            } finally {
+                this.settings.llm.reconfiguring = false;
             }
         },
 

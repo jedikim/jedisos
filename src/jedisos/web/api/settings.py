@@ -51,6 +51,12 @@ class LLMSettingsUpdate(BaseModel):  # [JS-W003.1]
     timeout: int | None = None
 
 
+class RoleModelsUpdate(BaseModel):  # [JS-W003.9]
+    """역할별 모델 매핑 업데이트 모델."""
+
+    roles: dict[str, list[str]]
+
+
 class EnvUpdate(BaseModel):  # [JS-W003.2]
     """환경변수 업데이트 모델."""
 
@@ -164,3 +170,83 @@ async def update_env_var(update: EnvUpdate) -> dict[str, str]:
     _ENV_PATH.write_text("\n".join(lines) + "\n")
     logger.info("env_var_updated", key=update.key)
     return {"status": "updated", "key": update.key}
+
+
+@router.get("/llm/roles")  # [JS-W003.10]
+async def get_model_roles() -> dict[str, Any]:
+    """현재 역할별 모델 매핑을 반환합니다."""
+    from jedisos.web.app import get_app_state
+
+    state = get_app_state()
+    llm = state.get("llm")
+    if not llm:
+        return {"roles": {}, "fallback_models": []}
+
+    roles: dict[str, list[str]] = {}
+    for role in ("reason", "code", "chat", "classify", "extract"):
+        roles[role] = llm.models_for(role)
+
+    return {
+        "roles": roles,
+        "fallback_models": llm.models,
+    }
+
+
+@router.put("/llm/roles")  # [JS-W003.11]
+async def update_model_roles(update: RoleModelsUpdate) -> dict[str, str]:
+    """역할별 모델 매핑을 수동으로 업데이트합니다."""
+    import yaml
+
+    from jedisos.web.app import get_app_state
+
+    state = get_app_state()
+    llm = state.get("llm")
+    if not llm:
+        raise HTTPException(status_code=503, detail="LLM 라우터가 초기화되지 않았습니다")
+
+    valid_roles = {"reason", "code", "chat", "classify", "extract"}
+    for role in update.roles:
+        if role not in valid_roles:
+            raise HTTPException(status_code=400, detail=f"잘못된 역할: {role}")
+
+    llm.set_role_models(update.roles)
+
+    # model_roles.yaml에 캐시 저장
+    cache_path = _DATA_DIR / "model_roles.yaml"
+    try:
+        cache_path.write_text(
+            yaml.dump(update.roles, allow_unicode=True, default_flow_style=False),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        logger.warning("model_roles_cache_save_failed", error=str(e))
+
+    logger.info("model_roles_updated_manually", roles=update.roles)
+    return {"status": "updated"}
+
+
+@router.post("/llm/reconfigure")  # [JS-W003.12]
+async def reconfigure_models() -> dict[str, Any]:
+    """모델 자동 구성을 다시 실행합니다 (캐시 삭제 후)."""
+    from jedisos.web.app import get_app_state
+
+    state = get_app_state()
+    llm = state.get("llm")
+    if not llm:
+        raise HTTPException(status_code=503, detail="LLM 라우터가 초기화되지 않았습니다")
+
+    # 캐시 삭제
+    cache_path = _DATA_DIR / "model_roles.yaml"
+    if cache_path.exists():
+        cache_path.unlink()
+
+    try:
+        from jedisos.llm.auto_config import auto_configure_roles
+
+        role_mapping = await auto_configure_roles(llm, data_dir=str(_DATA_DIR))
+        llm.set_role_models(role_mapping)
+        logger.info("model_roles_reconfigured", mapping=role_mapping)
+        return {"status": "reconfigured", "roles": role_mapping}
+    except Exception as e:
+        logger.error("model_roles_reconfigure_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"자동 구성 실패: {e}") from e
