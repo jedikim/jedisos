@@ -1,8 +1,8 @@
 # docker/Dockerfile
-# JediSOS 프로덕션 이미지
+# JediSOS 프로덕션 이미지 (multi-arch: amd64 + arm64)
 #
 # [JS-X001] docker/Dockerfile
-# version: 3.0.0
+# version: 4.0.0
 # created: 2026-02-18
 # modified: 2026-02-19
 
@@ -10,18 +10,25 @@
 FROM python:3.12-slim AS builder
 WORKDIR /app
 
+ARG TARGETARCH
+
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 
-# PyTorch CPU-only 먼저 설치 (CUDA 제거 → ~300MB vs ~1.5GB)
-# 이 레이어는 거의 바뀌지 않으므로 캐시 효율 극대화
+# PyTorch CPU-only (CUDA 제거 → ~189MB vs ~1.5GB)
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# sentence-transformers (local embedding) — PyTorch CPU 이미 설치되어 CUDA 안 받음
+# sentence-transformers (local embedding)
 RUN pip install --no-cache-dir sentence-transformers
 
-# zvec: AVX-512 이슈 회피 — 커스텀 x86-64-v2 wheel
+# zvec: 아키텍처별 분기
+#   amd64 → 커스텀 wheel (AVX-512 회피, x86-64-v2 빌드)
+#   arm64 → PyPI 공식 wheel (ARM에는 AVX 이슈 없음)
 COPY dist/zvec-*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/zvec-*.whl
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        pip install --no-cache-dir /tmp/zvec-*.whl; \
+    else \
+        pip install --no-cache-dir zvec; \
+    fi
 
 # zvecsearch
 RUN pip install --no-cache-dir git+https://github.com/jedikim/zvecsearch.git

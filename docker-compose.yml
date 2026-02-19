@@ -3,17 +3,17 @@
 # 사용법: docker compose up -d
 #
 # [JS-X002] docker-compose.yml
-# version: 2.0.0
+# version: 3.0.0
 # created: 2026-02-18
 # modified: 2026-02-19
 
 services:
   # JediSOS 메인 앱 (API + Web UI + zvecsearch + SecVault)
   jedisos:
+    image: ghcr.io/jedikim/jedisos:${JEDISOS_VERSION:-latest}
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: ghcr.io/jedikim/jedisos:${JEDISOS_VERSION:-latest}
     restart: unless-stopped
     environment:
       JEDISOS_DATA_DIR: /data
