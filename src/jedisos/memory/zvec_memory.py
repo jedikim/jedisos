@@ -70,10 +70,12 @@ class ZvecMemory:  # [JS-B001.1]
         self._search: Any = None
         if _HAS_ZVECSEARCH:
             self._search = ZvecSearch(
-                source=str(self.memory_dir),
-                db_path=str(self.zvec_dir / "db"),
+                paths=[str(self.memory_dir)],
+                zvec_path=str(self.zvec_dir / "db"),
+                collection=self.config.bank_id,
+                embedding_provider=self.config.embedding_provider,
             )
-            logger.info("zvec_search_initialized", source=str(self.memory_dir))
+            logger.info("zvec_search_initialized", paths=str(self.memory_dir))
         else:
             logger.warning("zvecsearch_not_available")
 
