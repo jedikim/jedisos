@@ -78,11 +78,11 @@ def chat(
 
 async def _run_chat(message: str, bank_id: str, model: str | None) -> str:  # [JS-H001.3]
     """chat 명령의 비동기 실행부."""
-    from jedisos.core.config import HindsightConfig, LLMConfig
+    from jedisos.core.config import LLMConfig, MemoryConfig
     from jedisos.llm.router import LLMRouter
-    from jedisos.memory.hindsight import HindsightMemory
+    from jedisos.memory.zvec_memory import ZvecMemory
 
-    memory = HindsightMemory(HindsightConfig())
+    memory = ZvecMemory(MemoryConfig())
 
     llm_config = LLMConfig()
     if model:

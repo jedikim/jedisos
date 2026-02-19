@@ -32,19 +32,19 @@ async def get_status() -> dict[str, Any]:
     memory = state.get("memory")
     llm = state.get("llm")
 
-    # Hindsight 연결 상태
-    hindsight_ok = False
+    # 메모리 시스템 상태
+    memory_ok = False
     if memory:
         try:
-            hindsight_ok = await memory.health_check()
+            memory_ok = await memory.health_check()
         except Exception:
-            hindsight_ok = False
+            memory_ok = False
 
     return {
         "version": __version__,
         "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "services": {
-            "hindsight": "ok" if hindsight_ok else "offline",
+            "memory": "ok" if memory_ok else "offline",
             "llm": "configured" if llm else "not_configured",
         },
         "models": list(llm.models) if llm else [],

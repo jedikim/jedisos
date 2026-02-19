@@ -670,7 +670,7 @@ class TestRuntimeTesting:  # [JS-T012.5]
         assert results[0].output == 10
 
     async def test_run_runtime_tests_dict_ok_false(self):
-        """ok=False 반환은 실패가 아님 (정상 에러 응답)."""
+        """ok=False 반환은 도구 내부 에러로 실패 처리."""
 
         @tool(name="search", description="검색")
         async def search(query: str) -> dict:
@@ -683,7 +683,8 @@ class TestRuntimeTesting:  # [JS-T012.5]
 
         results = await tester.run_runtime_tests(search, test_cases)
         assert len(results) == 1
-        assert results[0].passed is True  # ok=False여도 통과
+        assert results[0].passed is False  # ok=False → 도구 내부 에러로 실패
+        assert "ok=False" in results[0].error
 
     async def test_generate_test_cases_with_mock_llm(self):
         """LLM mock으로 테스트 케이스 생성 확인."""

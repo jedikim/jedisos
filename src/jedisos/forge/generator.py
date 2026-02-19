@@ -27,7 +27,7 @@ from jedisos.forge.security import CodeSecurityChecker, SecurityResult
 from jedisos.forge.tester import SkillTester
 
 if TYPE_CHECKING:
-    from jedisos.memory.hindsight import HindsightMemory
+    from jedisos.memory.zvec_memory import ZvecMemory
 
 logger = structlog.get_logger()
 
@@ -159,7 +159,7 @@ class SkillGenerator:  # [JS-K001.3]
         self,
         output_dir: Path | None = None,
         max_retries: int = 3,
-        memory: HindsightMemory | None = None,
+        memory: ZvecMemory | None = None,
     ) -> None:
         self.output_dir = output_dir or Path("tools/generated")
         self.max_retries = max_retries
@@ -218,9 +218,7 @@ class SkillGenerator:  # [JS-K001.3]
                 # 2. tool_name 검증 (경로 traversal 방지)
                 tool_name = spec.get("tool_name", "unnamed")
                 if not re.match(r"^[a-zA-Z0-9_]+$", tool_name):
-                    last_error = (
-                        f"잘못된 tool_name '{tool_name}' — 영문, 숫자, 밑줄만 허용됩니다."
-                    )
+                    last_error = f"잘못된 tool_name '{tool_name}' — 영문, 숫자, 밑줄만 허용됩니다."
                     logger.error(
                         "skill_generation_invalid_name",
                         tool_name=tool_name,
@@ -272,14 +270,11 @@ class SkillGenerator:  # [JS-K001.3]
                             tool_description=spec.get("description", ""),
                             parameters=getattr(tools[0], "_tool_parameters", {}),
                         )
-                        runtime_results = await self.tester.run_runtime_tests(
-                            tools[0], test_cases
-                        )
+                        runtime_results = await self.tester.run_runtime_tests(tools[0], test_cases)
                         failed = [r for r in runtime_results if not r.passed]
                         if failed:
                             error_details = "; ".join(
-                                f"Test '{r.test_case.description}': {r.error}"
-                                for r in failed
+                                f"Test '{r.test_case.description}': {r.error}" for r in failed
                             )
                             last_error = (
                                 f"런타임 테스트 실패 ({len(failed)}/{len(runtime_results)}): "
@@ -545,9 +540,7 @@ class SkillGenerator:  # [JS-K001.3]
                 if not context:
                     memories = result.get("memories", [])
                     if memories:
-                        parts = [
-                            m.get("content", "") for m in memories if m.get("content")
-                        ]
+                        parts = [m.get("content", "") for m in memories if m.get("content")]
                         context = "\n".join(parts)
             elif result is not None:
                 # RecallResponse 등 비-dict 객체 → 문자열 변환

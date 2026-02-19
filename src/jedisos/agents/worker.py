@@ -19,7 +19,7 @@ from jedisos.core.types import AgentRole
 
 if TYPE_CHECKING:
     from jedisos.llm.router import LLMRouter
-    from jedisos.memory.hindsight import HindsightMemory
+    from jedisos.memory.zvec_memory import ZvecMemory
 
 logger = structlog.get_logger()
 
@@ -34,7 +34,7 @@ class WorkerAgent:  # [JS-E003.1]
     def __init__(
         self,
         name: str,
-        memory: HindsightMemory,
+        memory: ZvecMemory,
         llm: LLMRouter,
         tools: list[Any] | None = None,
         system_prompt: str = "",

@@ -76,8 +76,21 @@ async def websocket_chat(websocket: WebSocket) -> None:
     """
     await manager.connect(websocket)
     try:
+        # SecVault 상태 전송
+        await _send_vault_status(websocket)
+
         while True:
             data = await websocket.receive_json()
+            msg_type = data.get("type", "")
+
+            # SecVault 비밀번호 설정/해제 처리
+            if msg_type == "vault_setup":
+                await _handle_vault_setup(websocket, data.get("password", ""))
+                continue
+            if msg_type == "vault_unlock":
+                await _handle_vault_unlock(websocket, data.get("password", ""))
+                continue
+
             message = data.get("message", "")
             bank_id = data.get("bank_id", "default")
 
@@ -97,18 +110,18 @@ async def websocket_chat(websocket: WebSocket) -> None:
                 _add_to_history(bank_id, "user", message)
 
                 full_response = ""
-                async for chunk in agent.run_stream(
-                    message, bank_id=bank_id, history=history
-                ):
+                async for chunk in agent.run_stream(message, bank_id=bank_id, history=history):
                     full_response += chunk
                     await websocket.send_json({"type": "stream", "content": chunk})
 
                 _add_to_history(bank_id, "assistant", full_response)
-                await websocket.send_json({
-                    "type": "done",
-                    "response": full_response,
-                    "bank_id": bank_id,
-                })
+                await websocket.send_json(
+                    {
+                        "type": "done",
+                        "response": full_response,
+                        "bank_id": bank_id,
+                    }
+                )
             except Exception as e:
                 logger.error("websocket_agent_error", error=str(e))
                 await websocket.send_json({"error": f"처리 실패: {e}"})
@@ -196,3 +209,64 @@ async def _run_agent(message: str, bank_id: str, model: str | None = None) -> st
 
     _add_to_history(bank_id, "assistant", response)
     return response
+
+
+async def _send_vault_status(websocket: WebSocket) -> None:  # [JS-W002.11]
+    """WebSocket 연결 시 SecVault 상태를 전송합니다."""
+    from jedisos.web.app import get_app_state
+
+    state = get_app_state()
+    vault_client = state.get("vault_client")
+    if vault_client is None:
+        return
+
+    try:
+        status = await vault_client.status()
+        await websocket.send_json(
+            {
+                "type": "vault_status",
+                "status": status.get("status", "unknown"),
+            }
+        )
+    except Exception as e:
+        logger.warning("vault_status_send_failed", error=str(e))
+
+
+async def _handle_vault_setup(websocket: WebSocket, password: str) -> None:  # [JS-W002.12]
+    """SecVault 최초 비밀번호 설정을 처리합니다."""
+    from jedisos.web.app import get_app_state
+
+    state = get_app_state()
+    vault_client = state.get("vault_client")
+    if vault_client is None:
+        await websocket.send_json(
+            {"type": "vault_error", "error": "SecVault가 초기화되지 않았습니다."}
+        )
+        return
+
+    ok = await vault_client.setup(password)
+    if ok:
+        state["vault_status"] = "unlocked"
+        await websocket.send_json({"type": "vault_status", "status": "unlocked"})
+    else:
+        await websocket.send_json({"type": "vault_error", "error": "비밀번호 설정에 실패했습니다."})
+
+
+async def _handle_vault_unlock(websocket: WebSocket, password: str) -> None:  # [JS-W002.13]
+    """SecVault 잠금 해제를 처리합니다."""
+    from jedisos.web.app import get_app_state
+
+    state = get_app_state()
+    vault_client = state.get("vault_client")
+    if vault_client is None:
+        await websocket.send_json(
+            {"type": "vault_error", "error": "SecVault가 초기화되지 않았습니다."}
+        )
+        return
+
+    ok = await vault_client.unlock(password)
+    if ok:
+        state["vault_status"] = "unlocked"
+        await websocket.send_json({"type": "vault_status", "status": "unlocked"})
+    else:
+        await websocket.send_json({"type": "vault_error", "error": "비밀번호가 틀립니다."})

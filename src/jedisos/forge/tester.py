@@ -360,9 +360,7 @@ class SkillTester:  # [JS-K002.2]
         fallback_kwargs: dict[str, Any] = {}
         for param_name, param_info in parameters.items():
             param_type = param_info.get("type", "str")
-            fallback_kwargs[param_name] = _DEFAULT_VALUES_BY_TYPE.get(
-                param_type, "test"
-            )
+            fallback_kwargs[param_name] = _DEFAULT_VALUES_BY_TYPE.get(param_type, "test")
 
         logger.info(
             "runtime_test_cases_fallback",
@@ -409,11 +407,7 @@ class SkillTester:  # [JS-K002.2]
 
                 # dict 응답에서 ok: False인 경우 → 실패로 처리  [JS-K002.14]
                 # (API 호출 실패, URL 404 등 도구 내부 에러를 감지)
-                if (
-                    isinstance(output, dict)
-                    and output.get("ok") is False
-                    and not tc.expect_error
-                ):
+                if isinstance(output, dict) and output.get("ok") is False and not tc.expect_error:
                     err_msg = output.get("error", "")
                     err_detail = output.get("message", "")
                     results.append(

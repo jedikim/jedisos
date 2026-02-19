@@ -17,7 +17,7 @@ logger = structlog.get_logger()
 
 # 싱글톤 인스턴스 (lifespan에서 초기화)
 _llm_router: Any = None  # LLMRouter
-_memory: Any = None  # HindsightMemory
+_memory: Any = None  # ZvecMemory
 
 # 스킬 전용 메모리 뱅크 (에이전트 대화 "jedisos-default"와 분리)
 SKILL_MEMORY_BANK = "jedisos-skills"
@@ -33,7 +33,7 @@ def initialize(llm_router: Any, memory: Any) -> None:  # [JS-K006.1]
 
     Args:
         llm_router: LLMRouter 인스턴스
-        memory: HindsightMemory 인스턴스
+        memory: ZvecMemory 인스턴스
     """
     global _llm_router, _memory
     _llm_router = llm_router

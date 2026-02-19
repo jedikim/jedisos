@@ -10,11 +10,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from jedisos.core.config import HindsightConfig, LLMConfig
+from jedisos.core.config import LLMConfig, MemoryConfig
 from jedisos.llm.router import LLMRouter
 from jedisos.mcp.client import MCPClientManager
 from jedisos.mcp.server import create_mcp_server
-from jedisos.memory.hindsight import HindsightMemory
+from jedisos.memory.zvec_memory import ZvecMemory
 
 
 def _make_llm_response(content: str = "답변", tool_calls: list | None = None) -> MagicMock:
@@ -32,9 +32,9 @@ def _make_llm_response(content: str = "답변", tool_calls: list | None = None) 
 
 
 @pytest.fixture
-def mock_memory():
-    config = HindsightConfig(api_url="http://fake:8888", bank_id="test-bank")
-    return HindsightMemory(config=config)
+def mock_memory(tmp_path):
+    config = MemoryConfig(data_dir=str(tmp_path / "data"), bank_id="test-bank")
+    return ZvecMemory(config=config)
 
 
 @pytest.fixture
@@ -331,16 +331,13 @@ class TestMCPMemoryToolExecution:  # [JS-T007.6]
 
         wrapper = HindsightMCPWrapper(mock_memory)
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"id": "mem_test"}
-        mock_resp.raise_for_status = MagicMock()
+        retain_result = {"status": "retained", "bank_id": "test-bank", "content_length": 7}
 
         with patch.object(
-            mock_memory._client, "post", new_callable=AsyncMock, return_value=mock_resp
+            mock_memory, "retain", new_callable=AsyncMock, return_value=retain_result
         ):
             result = await wrapper.execute("memory_retain", {"content": "테스트 저장"})
-            assert result["id"] == "mem_test"
+            assert result["status"] == "retained"
 
     @pytest.mark.asyncio
     async def test_agent_with_mcp_wrapper_executor(self, mock_memory, mock_llm):
@@ -380,18 +377,16 @@ class TestMCPMemoryToolExecution:  # [JS-T007.6]
                 return tool_call_response
             return final_response
 
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"response": "이전에 파이썬 개발자라고 했습니다"}
-        mock_resp.raise_for_status = MagicMock()
+        recall_result = {
+            "context": "이전에 파이썬 개발자라고 했습니다",
+            "memories": [],
+            "query": "이전 대화",
+            "bank_id": "test-bank",
+        }
 
         with (
-            patch.object(
-                mock_memory._client, "post", new_callable=AsyncMock, return_value=mock_resp
-            ),
-            patch.object(
-                mock_memory._client, "get", new_callable=AsyncMock, return_value=mock_resp
-            ),
+            patch.object(mock_memory, "recall", new_callable=AsyncMock, return_value=recall_result),
+            patch.object(mock_memory, "retain", new_callable=AsyncMock, return_value={}),
             patch("jedisos.llm.router.litellm.acompletion", side_effect=mock_acompletion),
         ):
             result = await agent.run("이전에 뭐라고 했지?")

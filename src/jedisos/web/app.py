@@ -369,9 +369,7 @@ def _register_builtin_tools(  # [JS-W001.10]
                                 )
                                 tool_func = result.tools[0] if result.tools else None
                                 desc = (
-                                    getattr(tool_func, "_tool_description", "")
-                                    if tool_func
-                                    else ""
+                                    getattr(tool_func, "_tool_description", "") if tool_func else ""
                                 )
 
                                 msg = (
@@ -690,17 +688,45 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # [JS-W001.1]
     _load_env_from_data_dir()
 
     # 시작 시 초기화
-    from jedisos.core.config import HindsightConfig, JedisosConfig, LLMConfig, SecurityConfig
+    from jedisos.core.config import JedisosConfig, LLMConfig, MemoryConfig, SecurityConfig
     from jedisos.llm.router import LLMRouter
-    from jedisos.memory.hindsight import HindsightMemory
+    from jedisos.memory.zvec_memory import ZvecMemory
     from jedisos.security.audit import AuditLogger
     from jedisos.security.pdp import PolicyDecisionPoint
+    from jedisos.security.secvault_client import SecVaultClient
+    from jedisos.security.secvault_daemon import start_daemon, stop_daemon
 
     config = JedisosConfig()
-    memory = HindsightMemory(HindsightConfig())
+    memory = ZvecMemory(MemoryConfig())
     llm = LLMRouter(LLMConfig())
     pdp = PolicyDecisionPoint(SecurityConfig())
     audit = AuditLogger()
+
+    # SecVault 데몬 시작
+    data_dir = Path(os.environ.get("JEDISOS_DATA_DIR", memory.config.data_dir))
+    secvault_dir = data_dir / ".secvault"
+    vault_process = start_daemon(secvault_dir)
+    _app_state["vault_process"] = vault_process
+
+    # SecVault 클라이언트 연결 (데몬 소켓 대기)
+    vault_client = SecVaultClient(secvault_dir)
+    _app_state["vault_client"] = vault_client
+
+    # 메모리에 SecVault 클라이언트 연결
+    memory.set_vault_client(vault_client)
+
+    # SecVault 상태 확인 (소켓 준비 대기)
+    for _retry in range(20):
+        try:
+            vault_status = await vault_client.status()
+            _app_state["vault_status"] = vault_status.get("status", "unknown")
+            logger.info("secvault_status", vault_status=vault_status)
+            break
+        except ConnectionError:
+            await asyncio.sleep(0.2)
+    else:
+        _app_state["vault_status"] = "unavailable"
+        logger.warning("secvault_daemon_not_ready")
 
     # 스킬 공유 컨텍스트 초기화 (LLM + 메모리를 스킬에서 사용 가능하게)
     from jedisos.forge.context import initialize as init_skill_context
@@ -713,7 +739,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # [JS-W001.1]
     _app_state["pdp"] = pdp
     _app_state["audit"] = audit
 
-    # 내장 도구 등록 (Hindsight 메모리 + Forge 스킬 생성)
+    # 내장 도구 등록 (ZvecMemory + Forge 스킬 생성)
     builtin_tools, tool_executor = _register_builtin_tools(memory, llm)
     _app_state["builtin_tools"] = builtin_tools
     _app_state["tool_executor"] = tool_executor
@@ -726,6 +752,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # [JS-W001.1]
 
     # 종료 시 채널 봇 정리
     await _stop_channels()
+
+    # SecVault 데몬 종료
+    vault_proc = _app_state.get("vault_process")
+    if vault_proc:
+        stop_daemon(vault_proc)
+
     _app_state.clear()
     logger.info("web_app_shutdown")
 
@@ -739,7 +771,7 @@ def create_app() -> FastAPI:  # [JS-W001.3]
     """FastAPI 앱을 생성하고 라우터를 등록합니다."""
     app = FastAPI(
         title="JediSOS",
-        description="AI Agent System with Hindsight Memory",
+        description="AI Agent System with zvecsearch Memory",
         version=__version__,
         lifespan=lifespan,
     )

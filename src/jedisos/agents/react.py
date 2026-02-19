@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from jedisos.llm.router import LLMRouter
-    from jedisos.memory.hindsight import HindsightMemory
+    from jedisos.memory.zvec_memory import ZvecMemory
     from jedisos.security.audit import AuditLogger
     from jedisos.security.pdp import PolicyDecisionPoint
 
@@ -69,7 +69,7 @@ class ReActAgent:  # [JS-E001.2]
 
     def __init__(
         self,
-        memory: HindsightMemory,
+        memory: ZvecMemory,
         llm: LLMRouter,
         tools: list[Any] | None = None,
         identity_prompt: str = "",

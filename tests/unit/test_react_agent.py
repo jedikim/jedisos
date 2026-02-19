@@ -13,9 +13,9 @@ import pytest
 from jedisos.agents.react import MAX_TOOL_CALLS, AgentState, ReActAgent
 from jedisos.agents.supervisor import SupervisorAgent
 from jedisos.agents.worker import WorkerAgent
-from jedisos.core.config import HindsightConfig, LLMConfig
+from jedisos.core.config import LLMConfig, MemoryConfig
 from jedisos.core.types import AgentRole
-from jedisos.memory.hindsight import HindsightMemory
+from jedisos.memory.zvec_memory import ZvecMemory
 
 
 def _make_llm_response(content: str = "안녕하세요!") -> MagicMock:
@@ -30,11 +30,10 @@ def _make_llm_response(content: str = "안녕하세요!") -> MagicMock:
 
 
 @pytest.fixture
-def mock_memory():
-    """mock HindsightMemory."""
-    config = HindsightConfig(api_url="http://fake:8888", bank_id="test-bank")
-    memory = HindsightMemory(config=config)
-    return memory
+def mock_memory(tmp_path):
+    """ZvecMemory with tmp_path."""
+    config = MemoryConfig(data_dir=str(tmp_path / "data"), bank_id="test-bank")
+    return ZvecMemory(config=config)
 
 
 @pytest.fixture

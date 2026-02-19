@@ -14,15 +14,22 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class HindsightConfig(BaseSettings):  # [JS-A002.1]
-    """Hindsight 메모리 서버 설정."""
+class MemoryConfig(BaseSettings):  # [JS-A002.1]
+    """zvecsearch 기반 마크다운 메모리 설정."""
 
-    model_config = SettingsConfigDict(env_prefix="HINDSIGHT_")
+    model_config = SettingsConfigDict(env_prefix="MEMORY_")
 
-    api_url: str = Field(default="http://localhost:8888", description="Hindsight API URL")
+    data_dir: str = Field(default="/data", description="메모리 데이터 디렉토리")
+    embedding_provider: str = Field(
+        default="default", description="임베딩 프로바이더: default(local)|openai|google"
+    )
+    reranker: str = Field(default="default", description="리랭커: default|rrf|weighted")
+    watch_mode: bool = Field(default=True, description="파일 변경 시 자동 재인덱싱")
     bank_id: str = Field(default="jedisos-default", description="기본 메모리 뱅크 ID")
-    api_llm_provider: str = Field(default="openai", description="Hindsight LLM 프로바이더")
-    api_llm_api_key: str = Field(default="", description="Hindsight LLM API 키")
+
+
+# 하위 호환 alias
+HindsightConfig = MemoryConfig
 
 
 class LLMConfig(BaseSettings):  # [JS-A002.2]
@@ -69,6 +76,6 @@ class JedisosConfig(BaseSettings):  # [JS-A002.4]
     debug: bool = Field(default=False)
     log_level: str = Field(default="INFO")
 
-    hindsight: HindsightConfig = Field(default_factory=HindsightConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)

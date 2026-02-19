@@ -16,8 +16,12 @@ class ConfigError(JedisosError):  # [JS-A003.2]
     """설정 관련 에러."""
 
 
-class HindsightMemoryError(JedisosError):  # [JS-A003.3]
-    """Hindsight 메모리 관련 에러."""
+class MemorySystemError(JedisosError):  # [JS-A003.3]
+    """메모리 시스템 관련 에러."""
+
+
+# 하위 호환 alias
+HindsightMemoryError = MemorySystemError
 
 
 class LLMError(JedisosError):  # [JS-A003.4]

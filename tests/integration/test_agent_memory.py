@@ -12,16 +12,16 @@ import pytest
 from jedisos.agents.react import ReActAgent
 from jedisos.agents.supervisor import SupervisorAgent
 from jedisos.agents.worker import WorkerAgent
-from jedisos.core.config import HindsightConfig, LLMConfig
+from jedisos.core.config import LLMConfig, MemoryConfig
 from jedisos.llm.router import LLMRouter
-from jedisos.memory.hindsight import HindsightMemory
+from jedisos.memory.zvec_memory import ZvecMemory
 
 
 @pytest.fixture
-async def live_memory():
-    """실제 Hindsight 서버에 연결된 메모리."""
-    config = HindsightConfig(api_url="http://localhost:8888", bank_id="test-agent-integration")
-    memory = HindsightMemory(config=config)
+async def live_memory(tmp_path):
+    """실제 ZvecMemory 인스턴스."""
+    config = MemoryConfig(data_dir=str(tmp_path / "data"), bank_id="test-agent-integration")
+    memory = ZvecMemory(config=config)
     yield memory
     await memory.close()
 

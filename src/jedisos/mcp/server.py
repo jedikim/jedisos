@@ -19,13 +19,13 @@ from fastmcp import FastMCP
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from jedisos.memory.hindsight import HindsightMemory
+    from jedisos.memory.zvec_memory import ZvecMemory
 
 logger = structlog.get_logger()
 
 
 def create_mcp_server(  # [JS-D001.1]
-    memory: HindsightMemory | None = None,
+    memory: ZvecMemory | None = None,
     name: str = "JediSOS",
     version: str = "1.0.0",
 ) -> FastMCP:
@@ -63,7 +63,7 @@ def create_mcp_server(  # [JS-D001.1]
     return mcp
 
 
-def _register_memory_tools(mcp: FastMCP, memory: HindsightMemory | None) -> None:  # [JS-D001.2]
+def _register_memory_tools(mcp: FastMCP, memory: ZvecMemory | None) -> None:  # [JS-D001.2]
     """메모리 관련 MCP 도구를 등록합니다."""
     if not memory:
         return

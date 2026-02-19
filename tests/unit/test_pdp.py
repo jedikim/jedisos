@@ -208,14 +208,14 @@ class TestAgentWithPDP:  # [JS-T008.7]
     """에이전트가 PDP를 통해 도구 호출을 제어하는지 테스트."""
 
     @pytest.mark.asyncio
-    async def test_agent_blocks_tool_via_pdp(self):
+    async def test_agent_blocks_tool_via_pdp(self, tmp_path):
         """PDP가 차단한 도구는 에이전트에서 실행되지 않음."""
         from jedisos.agents.react import ReActAgent
-        from jedisos.core.config import HindsightConfig, LLMConfig
+        from jedisos.core.config import LLMConfig, MemoryConfig
         from jedisos.llm.router import LLMRouter
-        from jedisos.memory.hindsight import HindsightMemory
+        from jedisos.memory.zvec_memory import ZvecMemory
 
-        memory = HindsightMemory(HindsightConfig(api_url="http://fake:8888"))
+        memory = ZvecMemory(MemoryConfig(data_dir=str(tmp_path / "data"), bank_id="test-pdp"))
         llm = LLMRouter(LLMConfig(models=["gpt-5.2"], config_file="nonexistent.yaml"))
         config = SecurityConfig(blocked_tools=["dangerous_tool"])
         pdp = PolicyDecisionPoint(config)
@@ -240,14 +240,14 @@ class TestAgentWithPDP:  # [JS-T008.7]
         assert len(denied) == 1
 
     @pytest.mark.asyncio
-    async def test_agent_allows_tool_via_pdp(self):
+    async def test_agent_allows_tool_via_pdp(self, tmp_path):
         """PDP가 허용한 도구는 정상 실행."""
         from jedisos.agents.react import ReActAgent
-        from jedisos.core.config import HindsightConfig, LLMConfig
+        from jedisos.core.config import LLMConfig, MemoryConfig
         from jedisos.llm.router import LLMRouter
-        from jedisos.memory.hindsight import HindsightMemory
+        from jedisos.memory.zvec_memory import ZvecMemory
 
-        memory = HindsightMemory(HindsightConfig(api_url="http://fake:8888"))
+        memory = ZvecMemory(MemoryConfig(data_dir=str(tmp_path / "data"), bank_id="test-pdp"))
         llm = LLMRouter(LLMConfig(models=["gpt-5.2"], config_file="nonexistent.yaml"))
         config = SecurityConfig(blocked_tools=["shell_exec"])
         pdp = PolicyDecisionPoint(config)
@@ -271,14 +271,14 @@ class TestAgentWithPDP:  # [JS-T008.7]
         assert audit.get_denied_entries() == []
 
     @pytest.mark.asyncio
-    async def test_agent_full_flow_with_pdp(self):
+    async def test_agent_full_flow_with_pdp(self, tmp_path):
         """PDP + 감사 로그가 포함된 전체 에이전트 플로우."""
         from jedisos.agents.react import ReActAgent
-        from jedisos.core.config import HindsightConfig, LLMConfig
+        from jedisos.core.config import LLMConfig, MemoryConfig
         from jedisos.llm.router import LLMRouter
-        from jedisos.memory.hindsight import HindsightMemory
+        from jedisos.memory.zvec_memory import ZvecMemory
 
-        memory = HindsightMemory(HindsightConfig(api_url="http://fake:8888"))
+        memory = ZvecMemory(MemoryConfig(data_dir=str(tmp_path / "data"), bank_id="test-pdp"))
         llm = LLMRouter(LLMConfig(models=["gpt-5.2"], config_file="nonexistent.yaml"))
         config = SecurityConfig(blocked_tools=["shell_exec"])
         pdp = PolicyDecisionPoint(config)

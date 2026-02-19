@@ -1,44 +1,26 @@
 # JediSOS 개발 환경
 # 사용법: docker compose -f docker-compose.dev.yml up -d
-version: "3.9"
+#
+# zvecsearch 메모리는 로컬 파일시스템 기반이므로 별도 DB 불필요
 
 services:
-  postgres:
-    image: pgvector/pgvector:pg18
-    container_name: jedisos-postgres
+  jedisos:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: jedisos-dev
     environment:
-      POSTGRES_USER: hindsight
-      POSTGRES_PASSWORD: ${HINDSIGHT_DB_PASSWORD:-hindsight_dev}
-      POSTGRES_DB: hindsight
+      JEDISOS_DATA_DIR: /data
+      MEMORY_DATA_DIR: /data
+      MEMORY_EMBEDDING_PROVIDER: default
+    env_file:
+      - path: .env
+        required: false
     ports:
-      - "5432:5432"
+      - "${JEDISOS_PORT:-8866}:8866"
     volumes:
-      - pgdata:/var/lib/postgresql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hindsight"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  hindsight:
-    image: ghcr.io/vectorize-io/hindsight:latest
-    container_name: jedisos-hindsight
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      HINDSIGHT_API_LLM_API_KEY: ${HINDSIGHT_API_LLM_API_KEY:-${OPENAI_API_KEY}}
-      HINDSIGHT_API_LLM_PROVIDER: ${HINDSIGHT_API_LLM_PROVIDER:-openai}
-      HINDSIGHT_API_DATABASE_URL: postgresql://hindsight:${HINDSIGHT_DB_PASSWORD:-hindsight_dev}@postgres:5432/hindsight
-    ports:
-      - "8888:8888"  # API
-      - "9999:9999"  # UI
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8888/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      - ./config:/config
+      - jedisos_dev_data:/data
 
 volumes:
-  pgdata:
+  jedisos_dev_data:

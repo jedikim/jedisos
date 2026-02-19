@@ -12,22 +12,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from jedisos.channels.telegram import TelegramChannel
-from jedisos.core.config import HindsightConfig, LLMConfig, SecurityConfig
+from jedisos.core.config import LLMConfig, MemoryConfig, SecurityConfig
 from jedisos.core.envelope import Envelope
 from jedisos.core.exceptions import ChannelError
 from jedisos.core.types import ChannelType, EnvelopeState
 from jedisos.llm.router import LLMRouter
-from jedisos.memory.hindsight import HindsightMemory
+from jedisos.memory.zvec_memory import ZvecMemory
 from jedisos.security.audit import AuditLogger
 from jedisos.security.pdp import PolicyDecisionPoint
 
 
 @pytest.fixture
-def mock_agent():
+def mock_agent(tmp_path):
     """mock ReActAgent."""
     from jedisos.agents.react import ReActAgent
 
-    memory = HindsightMemory(HindsightConfig(api_url="http://fake:8888"))
+    memory = ZvecMemory(MemoryConfig(data_dir=str(tmp_path / "data"), bank_id="test-channels"))
     llm = LLMRouter(LLMConfig(models=["gpt-5.2"], config_file="nonexistent.yaml"))
     return ReActAgent(memory=memory, llm=llm)
 
@@ -156,11 +156,11 @@ class TestProcessEnvelope:  # [JS-T009.3]
             assert envelope.state == EnvelopeState.FAILED
 
     @pytest.mark.asyncio
-    async def test_process_pdp_denied(self):
+    async def test_process_pdp_denied(self, tmp_path):
         """PDP가 차단하면 DENIED 상태."""
         from jedisos.agents.react import ReActAgent
 
-        memory = HindsightMemory(HindsightConfig(api_url="http://fake:8888"))
+        memory = ZvecMemory(MemoryConfig(data_dir=str(tmp_path / "data"), bank_id="test-pdp"))
         llm = LLMRouter(LLMConfig(models=["gpt-5.2"], config_file="nonexistent.yaml"))
         agent = ReActAgent(memory=memory, llm=llm)
 

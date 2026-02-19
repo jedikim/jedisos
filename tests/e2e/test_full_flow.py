@@ -135,12 +135,12 @@ class TestCLIChat:  # [JS-T010.5]
                 return_value=mock_resp,
             ),
             patch(
-                "jedisos.memory.hindsight.HindsightMemory.recall",
+                "jedisos.memory.zvec_memory.ZvecMemory.recall",
                 new_callable=AsyncMock,
                 return_value={},
             ),
             patch(
-                "jedisos.memory.hindsight.HindsightMemory.retain",
+                "jedisos.memory.zvec_memory.ZvecMemory.retain",
                 new_callable=AsyncMock,
                 return_value={},
             ),
@@ -165,12 +165,12 @@ class TestCLIChat:  # [JS-T010.5]
                 return_value=mock_resp,
             ),
             patch(
-                "jedisos.memory.hindsight.HindsightMemory.recall",
+                "jedisos.memory.zvec_memory.ZvecMemory.recall",
                 new_callable=AsyncMock,
                 return_value={},
             ),
             patch(
-                "jedisos.memory.hindsight.HindsightMemory.retain",
+                "jedisos.memory.zvec_memory.ZvecMemory.retain",
                 new_callable=AsyncMock,
                 return_value={},
             ),
@@ -187,12 +187,12 @@ class TestCLIChat:  # [JS-T010.5]
                 side_effect=Exception("API 오류"),
             ),
             patch(
-                "jedisos.memory.hindsight.HindsightMemory.recall",
+                "jedisos.memory.zvec_memory.ZvecMemory.recall",
                 new_callable=AsyncMock,
                 side_effect=Exception("연결 실패"),
             ),
             patch(
-                "jedisos.memory.hindsight.HindsightMemory.retain",
+                "jedisos.memory.zvec_memory.ZvecMemory.retain",
                 new_callable=AsyncMock,
                 return_value={},
             ),

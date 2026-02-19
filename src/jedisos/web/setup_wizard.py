@@ -138,8 +138,8 @@ async def get_recommended_mcp() -> dict[str, Any]:
     return {
         "servers": [
             {
-                "name": "hindsight-memory",
-                "description": "Hindsight 메모리 도구 (retain/recall/reflect)",
+                "name": "zvec-memory",
+                "description": "zvecsearch 메모리 도구 (retain/recall/reflect)",
                 "category": "memory",
                 "builtin": True,
             },

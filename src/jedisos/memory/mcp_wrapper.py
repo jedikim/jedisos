@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 if TYPE_CHECKING:
-    from jedisos.memory.hindsight import HindsightMemory
+    from jedisos.memory.zvec_memory import ZvecMemory
 
 logger = structlog.get_logger()
 
@@ -26,7 +26,7 @@ class HindsightMCPWrapper:  # [JS-B003.1]
     에이전트가 MCP 프로토콜을 통해 메모리 연산을 호출할 수 있도록 합니다.
     """
 
-    def __init__(self, memory: HindsightMemory) -> None:
+    def __init__(self, memory: ZvecMemory) -> None:
         self.memory = memory
 
     def get_tools(self) -> list[dict[str, Any]]:  # [JS-B003.2]

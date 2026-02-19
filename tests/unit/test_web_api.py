@@ -241,7 +241,7 @@ class TestMonitoringAPI:  # [JS-T011.5]
             resp = client.get("/api/monitoring/status")
             assert resp.status_code == 200
             data = resp.json()
-            assert data["services"]["hindsight"] == "ok"
+            assert data["services"]["memory"] == "ok"
             assert data["models"] == ["gpt-5.2"]
 
     def test_audit_no_state(self, client):
@@ -377,7 +377,7 @@ class TestSetupWizardAPI:  # [JS-T011.6]
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["servers"]) >= 1
-        assert data["servers"][0]["name"] == "hindsight-memory"
+        assert data["servers"][0]["name"] == "zvec-memory"
 
 
 class TestWebUI:  # [JS-T011.7]

@@ -183,13 +183,13 @@ async def _record_skill_deletion(name: str, description: str) -> None:  # [JS-W0
     """삭제된 스킬 정보를 Hindsight에 기록합니다.
 
     SkillGenerator.retain_skill_deletion()을 호출하여 동일 스킬 재생성을 방지합니다.
-    Hindsight 연결 실패 시에도 삭제 자체는 완료됩니다.
+    메모리 연결 실패 시에도 삭제 자체는 완료됩니다.
     """
     try:
         from jedisos.forge.generator import SkillGenerator
-        from jedisos.memory.hindsight import HindsightMemory
+        from jedisos.memory.zvec_memory import ZvecMemory
 
-        memory = HindsightMemory()
+        memory = ZvecMemory()
         generator = SkillGenerator(memory=memory)
         await generator.retain_skill_deletion(tool_name=name, description=description)
         await memory.close()

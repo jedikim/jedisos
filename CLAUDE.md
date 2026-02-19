@@ -125,7 +125,7 @@ async def recall_memory(
 # 커스텀 예외 사용 (stdlib Exception 직접 raise 금지)
 from jedisos.core.exceptions import (
     JedisosError,        # 기본 예외
-    MemoryError,          # 메모리 관련
+    MemorySystemError,    # 메모리 관련
     LLMError,             # LLM 호출 관련
     ChannelError,         # 채널 관련
     SecurityError,        # 보안 관련
@@ -139,7 +139,7 @@ try:
     result = await client.recall(query=query)
 except httpx.HTTPStatusError as e:
     logger.error("hindsight_recall_failed", status=e.response.status_code, query=query)
-    raise MemoryError(f"Recall 실패: {e.response.status_code}") from e
+    raise MemorySystemError(f"Recall 실패: {e.response.status_code}") from e
 ```
 
 ### 5. 로깅 표준
