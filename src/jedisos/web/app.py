@@ -637,7 +637,7 @@ async def _broadcast_notification(event: str, message: str) -> None:  # [JS-W001
         for conn in list(ws_manager.active_connections):
             with contextlib.suppress(Exception):
                 await conn.send_json(payload)
-    except Exception:
+    except Exception:  # nosec B110 — WebSocket 알림 실패는 무시해도 안전
         pass
 
     # 2) 텔레그램 — 최근 대화한 사용자에게 알림
