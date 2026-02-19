@@ -42,6 +42,9 @@ jobs:
           bandit -r src/ -c pyproject.toml
 
       - name: Test
+        env:
+          OPENAI_API_KEY: sk-test-ci-dummy-key
+          GEMINI_API_KEY: test-ci-dummy-key
         run: |
           source .venv/bin/activate
           pytest tests/unit/ -v --timeout=30
