@@ -56,6 +56,26 @@ _OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
 _GOOGLE_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 _CACHE_FILENAME = "model_roles.yaml"
 
+# chat completions API를 지원하지 않는 특수 모델 접미사 필터
+_EXCLUDED_SUFFIXES = (
+    "-codex",
+    "-customtools",
+    "-tuning",
+    "-grounding",
+    "-imagegeneration",
+    "-search",
+    "-realtime",
+    "-transcribe",
+    "-tts",
+)
+
+
+def _is_chat_compatible(model_id: str) -> bool:
+    """Chat Completions API 호환 모델인지 확인합니다."""
+    mid_lower = model_id.lower()
+    return not any(mid_lower.endswith(s) for s in _EXCLUDED_SUFFIXES)
+
+
 _ROLE_PROMPT = """\
 You are an AI infrastructure architect.
 Given the available models and pricing research, assign the best model for each role.
@@ -74,7 +94,7 @@ Given the available models and pricing research, assign the best model for each 
 4. ONLY use models from the list. Do NOT invent names.
 5. Prefer newer generations (gemini-3 > gemini-2, gpt-5 > gpt-4).
 6. Use the EXACT model ID as shown (including "gemini/" prefix).
-7. AVOID specialized variant models with suffixes like -customtools, -tuning, -grounding, -imagegeneration, -search. Use base/standard models only.
+7. AVOID specialized variant models with suffixes like -codex, -customtools, -tuning, -grounding, -imagegeneration, -search. Use base/standard models only. Codex models use a different API and cannot be used for chat.
 
 ## Available Models
 {models_text}
@@ -105,7 +125,9 @@ async def discover_available_models() -> dict[str, list[dict[str, Any]]]:  # [JS
                 data = resp.json()
             for m in data.get("data", []):
                 mid = m.get("id", "")
-                if any(k in mid for k in ("gpt-", "o1", "o3", "o4", "chatgpt", "codex")):
+                if any(
+                    k in mid for k in ("gpt-", "o1", "o3", "o4", "chatgpt")
+                ) and _is_chat_compatible(mid):
                     result["openai"].append({"id": mid, "owned_by": m.get("owned_by", "")})
             logger.info("openai_models_discovered", count=len(result["openai"]))
         except Exception as e:
@@ -123,7 +145,7 @@ async def discover_available_models() -> dict[str, list[dict[str, Any]]]:  # [JS
                 if "gemini" in name:
                     mid = "gemini/" + name.replace("models/", "")
                     methods = m.get("supportedGenerationMethods", [])
-                    if "generateContent" in methods:
+                    if "generateContent" in methods and _is_chat_compatible(mid):
                         result["gemini"].append(
                             {"id": mid, "display_name": m.get("displayName", "")}
                         )
@@ -259,10 +281,16 @@ async def assign_model_roles(  # [JS-C003.2]
     call_model = llm_router.models[0]
 
     openai_roles = await _assign_for_provider(
-        "openai", openai_models, research, call_model,
+        "openai",
+        openai_models,
+        research,
+        call_model,
     )
     gemini_roles = await _assign_for_provider(
-        "gemini", gemini_models, research, call_model,
+        "gemini",
+        gemini_models,
+        research,
+        call_model,
     )
 
     # 역할별 폴백 체인 합치기

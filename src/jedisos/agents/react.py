@@ -30,6 +30,11 @@ logger = structlog.get_logger()
 
 MAX_TOOL_CALLS = 10
 
+# 의도별 도구 필터링 — 불필요한 도구를 제공하면 LLM이 도구를 남용함
+# "chat"/"question" → 메모리 도구 + 동적 스킬만 (스킬 관리 도구 제외)
+_SKILL_MGMT_TOOLS = frozenset({"create_skill", "list_skills", "delete_skill", "upgrade_skill"})
+_MEMORY_ONLY_INTENTS = frozenset({"chat", "question"})
+
 # 백그라운드 태스크 참조 (GC 방지)
 _background_tasks: set[asyncio.Task[None]] = set()
 
@@ -408,12 +413,11 @@ class ReActAgent:  # [JS-E001.2]
             role = _ROLE_MAP.get(msg.get("role", ""), msg.get("role", ""))
             llm_messages.append({"role": role, "content": msg.get("content", "")})
 
-        tool_defs = [t.to_dict() for t in self.tools] if self.tools else None
-
         # 2.5. 의도 분류 (소형 모델 — 저렴/빠름)
         llm_role = "chat"
+        intent = "chat"
         try:
-            intent = await self.llm.complete_text(
+            raw_intent = await self.llm.complete_text(
                 prompt=f"사용자: {user_message}",
                 system=(
                     "사용자 메시지의 의도를 한 단어로만 분류하세요. "
@@ -424,7 +428,7 @@ class ReActAgent:  # [JS-E001.2]
                 max_tokens=10,
                 temperature=0.0,
             )
-            intent = intent.strip().lower().split()[0] if intent else "chat"
+            intent = raw_intent.strip().lower().split()[0] if raw_intent else "chat"
             if intent == "complex":
                 llm_role = "reason"
             elif intent == "skill_request":
@@ -432,6 +436,21 @@ class ReActAgent:  # [JS-E001.2]
             logger.info("intent_classified", intent=intent, llm_role=llm_role)
         except Exception as e:
             logger.debug("intent_classify_failed", error=str(e))
+
+        # 2.6. 의도별 도구 필터링 — 불필요한 도구 호출 방지 (47초→6초)
+        if self.tools:
+            if intent in _MEMORY_ONLY_INTENTS:
+                # chat/question → 스킬 관리 도구 제외, 메모리 + 동적 스킬만
+                filtered = [
+                    t
+                    for t in self.tools
+                    if t.to_dict().get("function", {}).get("name") not in _SKILL_MGMT_TOOLS
+                ]
+                tool_defs = [t.to_dict() for t in filtered] if filtered else None
+            else:
+                tool_defs = [t.to_dict() for t in self.tools]
+        else:
+            tool_defs = None
 
         # 3. 스트리밍 LLM 호출
         #    - 텍스트 응답: 토큰 즉시 yield (실시간 스트리밍)

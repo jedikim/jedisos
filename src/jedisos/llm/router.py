@@ -71,6 +71,16 @@ class LLMRouter:  # [JS-C001.1]
         return chain[0] if chain else None
 
     @staticmethod
+    def _is_completion_only(model: str) -> bool:  # [JS-C001.11]
+        """Chat Completions API를 지원하지 않는 모델인지 확인합니다.
+
+        codex, tts, transcribe 등 특수 모델은 temperature, tools,
+        response_format 파라미터를 지원하지 않습니다.
+        """
+        m = model.lower()
+        return any(s in m for s in ("-codex", "codex-", "-tts", "-transcribe", "-realtime"))
+
+    @staticmethod
     def _filter_available_models(models: list[str]) -> list[str]:  # [JS-C001.8]
         """API 키가 설정된 프로바이더의 모델만 반환합니다."""
         available: list[str] = []
@@ -100,7 +110,9 @@ class LLMRouter:  # [JS-C001.1]
         return list(self.config.models)
 
     def _resolve_models(
-        self, model: str | None, role: str | None,
+        self,
+        model: str | None,
+        role: str | None,
     ) -> list[str]:  # [JS-C001.10]
         """호출에 사용할 모델 리스트를 결정합니다."""
         if model:
@@ -138,16 +150,24 @@ class LLMRouter:  # [JS-C001.1]
                 call_kwargs: dict[str, Any] = {
                     "model": m,
                     "messages": messages,
-                    "temperature": kwargs.get("temperature", self.config.temperature),
                     "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
                     "timeout": self.config.timeout,
                 }
-                if tools:
-                    call_kwargs["tools"] = tools
-                # Forward extra litellm params (response_format, etc.)
-                for k in ("response_format",):
-                    if k in kwargs:
-                        call_kwargs[k] = kwargs[k]
+
+                # codex/completion-only 모델은 temperature, tools, response_format 미지원
+                if self._is_completion_only(m):
+                    logger.debug("completion_only_model_detected", model=m)
+                else:
+                    call_kwargs["temperature"] = kwargs.get(
+                        "temperature",
+                        self.config.temperature,
+                    )
+                    if tools:
+                        call_kwargs["tools"] = tools
+                    # Forward extra litellm params (response_format, etc.)
+                    for k in ("response_format",):
+                        if k in kwargs:
+                            call_kwargs[k] = kwargs[k]
 
                 response = await litellm.acompletion(**call_kwargs)
                 logger.info("llm_call_success", model=m, role=role)
@@ -179,13 +199,20 @@ class LLMRouter:  # [JS-C001.1]
                 call_kwargs: dict[str, Any] = {
                     "model": m,
                     "messages": messages,
-                    "temperature": kwargs.get("temperature", self.config.temperature),
                     "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
                     "timeout": self.config.timeout,
                     "stream": True,
                 }
-                if tools:
-                    call_kwargs["tools"] = tools
+
+                if self._is_completion_only(m):
+                    logger.debug("completion_only_model_stream", model=m)
+                else:
+                    call_kwargs["temperature"] = kwargs.get(
+                        "temperature",
+                        self.config.temperature,
+                    )
+                    if tools:
+                        call_kwargs["tools"] = tools
 
                 response = await litellm.acompletion(**call_kwargs)
                 async for chunk in response:
