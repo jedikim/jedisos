@@ -69,6 +69,18 @@ function app() {
         },
 
         // ──────────────────────────────
+        // SecVault 상태
+        // ──────────────────────────────
+        vault: {
+            status: null,      // 'needs_setup' | 'locked' | 'unlocked' | null
+            showModal: false,
+            password: '',
+            confirmPassword: '',
+            error: '',
+            saving: false,
+        },
+
+        // ──────────────────────────────
         // 채팅 상태
         // ──────────────────────────────
         chat: {
@@ -281,6 +293,28 @@ function app() {
                 this.chat.ws.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
+                        if (data.type === 'vault_error') {
+                            this.vault.saving = false;
+                            this.vault.error = data.error;
+                            return;
+                        }
+                        if (data.type === 'vault_status') {
+                            this.vault.saving = false;
+                            this.vault.status = data.status;
+                            if (data.status === 'needs_setup' || data.status === 'locked') {
+                                this.vault.showModal = true;
+                                if (data.status === 'locked' && this.vault.password) {
+                                    this.vault.error = '비밀번호가 올바르지 않습니다';
+                                }
+                            } else if (data.status === 'unlocked') {
+                                this.vault.showModal = false;
+                                this.vault.password = '';
+                                this.vault.confirmPassword = '';
+                                this.vault.error = '';
+                                this.showToast('SecVault 잠금 해제됨');
+                            }
+                            return;
+                        }
                         if (data.error) {
                             this.chat.messages.push({
                                 role: 'assistant',
@@ -413,6 +447,51 @@ function app() {
             if (el) {
                 el.scrollTop = el.scrollHeight;
             }
+        },
+
+        // ══════════════════════════════
+        // SecVault 메서드
+        // ══════════════════════════════
+
+        /**
+         * SecVault 비밀번호 설정 또는 잠금 해제.  [JS-W010.27]
+         */
+        submitVaultPassword() {
+            if (!this.chat.ws || this.chat.ws.readyState !== WebSocket.OPEN) {
+                this.vault.error = 'WebSocket이 연결되지 않았습니다';
+                return;
+            }
+            if (!this.vault.password || this.vault.password.length < 8) {
+                this.vault.error = '비밀번호는 8자 이상이어야 합니다';
+                return;
+            }
+            if (this.vault.status === 'needs_setup') {
+                if (this.vault.password !== this.vault.confirmPassword) {
+                    this.vault.error = '비밀번호가 일치하지 않습니다';
+                    return;
+                }
+                this.vault.saving = true;
+                this.vault.error = '';
+                this.chat.ws.send(JSON.stringify({
+                    type: 'vault_setup',
+                    password: this.vault.password,
+                }));
+            } else if (this.vault.status === 'locked') {
+                this.vault.saving = true;
+                this.vault.error = '';
+                this.chat.ws.send(JSON.stringify({
+                    type: 'vault_unlock',
+                    password: this.vault.password,
+                }));
+            }
+            // 응답은 vault_status 메시지로 옴 — onmessage에서 처리
+        },
+
+        /**
+         * SecVault 모달 없이 건너뛰기 (암호화 비활성).  [JS-W010.28]
+         */
+        skipVault() {
+            this.vault.showModal = false;
         },
 
         // ══════════════════════════════
