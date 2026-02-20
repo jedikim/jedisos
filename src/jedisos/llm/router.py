@@ -74,10 +74,14 @@ class LLMRouter:  # [JS-C001.1]
     def _is_completion_only(model: str) -> bool:  # [JS-C001.11]
         """Chat Completions API를 지원하지 않는 모델인지 확인합니다.
 
-        codex, tts, transcribe 등 특수 모델은 temperature, tools,
-        response_format 파라미터를 지원하지 않습니다.
+        구형 codex (codex-davinci 등), tts, transcribe 등 특수 모델은
+        temperature, tools, response_format 파라미터를 지원하지 않습니다.
+        gpt-5.2-codex 같은 신형 모델은 tools를 지원하므로 제외합니다.
         """
         m = model.lower()
+        # gpt-*-codex (예: gpt-5.2-codex)는 tools 지원 → completion-only 아님
+        if m.startswith("gpt-") and m.endswith("-codex"):
+            return False
         return any(s in m for s in ("-codex", "codex-", "-tts", "-transcribe", "-realtime"))
 
     @staticmethod
