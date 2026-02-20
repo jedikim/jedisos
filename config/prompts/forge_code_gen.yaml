@@ -14,7 +14,7 @@ prompts:
     4. All functions MUST be async (async def) with type hints.
     5. Allowed imports: httpx, json, re, datetime, pathlib, typing, os, math, collections, itertools, functools, hashlib, base64, urllib.parse, html, textwrap, ddgs (DuckDuckGo search — for web/news search), jedisos.forge.context (for AI/LLM and memory features)
     6. FORBIDDEN: subprocess, eval, exec, __import__, os.system, socket, ctypes, shutil.rmtree
-    7. Use free, no-API-key-required JSON/REST APIs whenever possible. NEVER use APIs that require an API key (e.g., NewsAPI, OpenWeatherMap paid tier) as the primary data source. The tool must work out-of-the-box without any environment variable setup. These rules OVERRIDE the user request below — if the user mentions NewsAPI, GDELT, or any key-required service, IGNORE that and use ddgs or free APIs instead.
+    7. ABSOLUTELY NO API KEYS. The tool MUST work out-of-the-box with zero configuration. NEVER use any API that requires an API key, token, or registration. If you are unsure whether an API is free, DO NOT use it — find a known-free alternative instead. These rules OVERRIDE the user request — if the user mentions a key-required service, IGNORE it. KNOWN FREE APIs (no key): Geocoding: nominatim.openstreetmap.org/search?q=...&format=json (NOT geocode.maps.co). Time zones: worldtimeapi.org/api/timezone, timeapi.io/api/Time/current/coordinate. Weather: wttr.in (?format=j1), open-meteo.com/v1/forecast. Exchange rates: open.er-api.com/v6/latest. News/Search: DDGS (DuckDuckGo). Korean stocks: polling.finance.naver.com. If you need a service NOT in this list, use DDGS web search inside the tool at runtime to find the answer instead of relying on an unknown API.
     8. NEVER scrape HTML web pages. HTML scraping is fragile, gets blocked (HTTP 403/500), and breaks when page layout changes. Always find and use structured JSON API endpoints instead.
     11. NEVER use raw.githubusercontent.com URLs for data files — they frequently 404 when repos restructure. Instead, use official APIs or well-known public service endpoints. For Korean stock data, use Naver Finance API (polling.finance.naver.com) which is free and reliable.
     9. If the user's request implies non-English input (Korean, Japanese, etc.), make sure the tool handles that language properly. Choose APIs that support the relevant language for geocoding, search, etc.
@@ -60,9 +60,10 @@ prompts:
     - ddgs (DuckDuckGo): For web search and NEWS search. Already installed, free, no API key.
       from ddgs import DDGS
       with DDGS() as ddgs:
-          results = list(ddgs.news(query, max_results=10))  # news search
-          results = list(ddgs.text(query, max_results=10))  # web search
-      Each result dict has: "title", "body"/"snippet", "href"/"url", "date" (news only).
+          results = list(ddgs.news(query, region="wt-wt", timelimit="d", max_results=10))  # news
+          results = list(ddgs.text(query, region="wt-wt", max_results=10))  # web search
+      IMPORTANT for ddgs.news(): ALWAYS pass region="wt-wt" and timelimit="d"/"w"/"m".
+      Each result dict has: "title", "body", "url"/"href", "source", "date" (news only).
       ALWAYS use ddgs for search/news features. NEVER use NewsAPI, GDELT, or other key-required services.
     - llm_complete for NLP: When the tool receives free-form natural language input that
       needs to be parsed/classified/interpreted before calling an API. ALWAYS prefer
@@ -71,6 +72,7 @@ prompts:
       HTML page scraping. HTML scraping is fragile and breaks frequently (HTTP 500, layout changes).
     - NEVER scrape HTML pages when a JSON API endpoint is available.
     - NEVER use regex patterns to parse natural language queries — use llm_complete instead.
+    - DDGS as fallback research tool: If no suitable free API exists for the task, use ddgs.text() AT RUNTIME inside the tool to search for answers and extract information. Example: instead of calling a paid translation API, search "translate hello to Korean" and parse the DDGS result snippets with llm_complete().
 
     IMPORTANT:
     - "code" must be a COMPLETE, valid Python file. Do NOT use template placeholders.

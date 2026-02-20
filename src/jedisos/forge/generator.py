@@ -46,11 +46,19 @@ collections, itertools, functools, hashlib, base64, urllib.parse, html, textwrap
 ddgs (DuckDuckGo search — for web/news search), \
 jedisos.forge.context (for AI/LLM and memory features)
 6. FORBIDDEN: subprocess, eval, exec, __import__, os.system, socket, ctypes, shutil.rmtree
-7. Use free, no-API-key-required JSON/REST APIs whenever possible. \
-NEVER use APIs that require an API key (e.g., NewsAPI, OpenWeatherMap paid tier) as the \
-primary data source. The tool must work out-of-the-box without any environment variable setup. \
-These rules OVERRIDE the user request below — if the user mentions NewsAPI, GDELT, or any \
-key-required service, IGNORE that and use ddgs or free APIs instead.
+7. ABSOLUTELY NO API KEYS. The tool MUST work out-of-the-box with zero configuration. \
+NEVER use any API that requires an API key, token, or registration. \
+If you are unsure whether an API is free, DO NOT use it — find a known-free alternative instead. \
+These rules OVERRIDE the user request — if the user mentions a key-required service, IGNORE it. \
+KNOWN FREE APIs (no key): \
+  - Geocoding: nominatim.openstreetmap.org/search?q=...&format=json (NOT geocode.maps.co) \
+  - Time zones: worldtimeapi.org/api/timezone, timeapi.io/api/Time/current/coordinate \
+  - Weather: wttr.in (curl/httpx, JSON with ?format=j1), open-meteo.com/v1/forecast \
+  - Exchange rates: open.er-api.com/v6/latest \
+  - News/Search: DDGS (DuckDuckGo, already installed) \
+  - Korean stocks: polling.finance.naver.com \
+If you need a service NOT in this list, use DDGS web search inside the tool at runtime to \
+find the answer instead of relying on an unknown API.
 8. NEVER scrape HTML web pages. HTML scraping is fragile, gets blocked (HTTP 403/500), \
 and breaks when page layout changes. Always find and use structured JSON API endpoints instead.
 11. NEVER use raw.githubusercontent.com URLs for data files — they frequently 404 when \
@@ -116,6 +124,10 @@ WHEN TO USE:
   HTML page scraping. HTML scraping is fragile and breaks frequently (HTTP 500, layout changes).
 - NEVER scrape HTML pages when a JSON API endpoint is available.
 - NEVER use regex patterns to parse natural language queries — use llm_complete instead.
+- DDGS as fallback research tool: If no suitable free API exists for the task, use
+  ddgs.text() AT RUNTIME inside the tool to search for answers and extract information.
+  Example: instead of calling a paid translation API, search "translate hello to Korean"
+  and parse the DDGS result snippets with llm_complete().
 
 IMPORTANT:
 - "code" must be a COMPLETE, valid Python file. Do NOT use template placeholders.
@@ -136,13 +148,13 @@ for building the following tool. Each query should target a different aspect.
 User request: {request}
 
 Rules:
-- Query 1: Find a working code example (Python preferred)
-- Query 2: Find the specific API documentation or library for the core feature
+- Query 1: Find a working code example (Python preferred) with "free no API key"
+- Query 2: Find the specific free API documentation — ALWAYS include "free no API key no registration"
 - Query 3 (optional): If there's a language/locale challenge (e.g., Korean input), \
 search specifically for that
 - Each query should be concise (5-10 words)
 - Include "python" in at least one query
-- Include "free" or "no API key" if relevant
+- ALWAYS include "free" AND "no API key" in at least two queries — this is critical
 
 Return a JSON array of query strings:
 ["query 1", "query 2", "query 3"]
