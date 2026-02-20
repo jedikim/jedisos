@@ -146,15 +146,15 @@ class ReActAgent:  # [JS-E001.2]
 
     async def _llm_reason(self, state: AgentState) -> dict:  # [JS-E001.5]
         """LLM으로 추론."""
-        system_parts: list[str] = []
-        if self.identity_prompt:
-            system_parts.append(self.identity_prompt)
-        if state.get("memory_context"):
-            system_parts.append(f"관련 기억:\n{state['memory_context']}")
+        from jedisos.llm.prompts import build_system_prompt
+
+        system = build_system_prompt(
+            identity=self.identity_prompt or "",
+            memory_context=state.get("memory_context", ""),
+        )
 
         messages: list[dict[str, Any]] = []
-        if system_parts:
-            messages.append({"role": "system", "content": "\n\n".join(system_parts)})
+        messages.append({"role": "system", "content": system})
 
         for msg in state["messages"]:
             if hasattr(msg, "type"):
@@ -411,15 +411,15 @@ class ReActAgent:  # [JS-E001.2]
             logger.warning("recall_failed_continuing", error=str(e))
 
         # 2. 시스템 프롬프트 구성
-        system_parts: list[str] = []
-        if self.identity_prompt:
-            system_parts.append(self.identity_prompt)
-        if memory_context:
-            system_parts.append(f"관련 기억:\n{memory_context}")
+        from jedisos.llm.prompts import build_system_prompt
+
+        system = build_system_prompt(
+            identity=self.identity_prompt or "",
+            memory_context=memory_context,
+        )
 
         llm_messages: list[dict[str, Any]] = []
-        if system_parts:
-            llm_messages.append({"role": "system", "content": "\n\n".join(system_parts)})
+        llm_messages.append({"role": "system", "content": system})
         for msg in messages:
             role = _ROLE_MAP.get(msg.get("role", ""), msg.get("role", ""))
             llm_messages.append({"role": role, "content": msg.get("content", "")})
