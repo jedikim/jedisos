@@ -307,6 +307,7 @@ function app() {
                 this.chat.ws.onopen = () => {
                     this.chat.connected = true;
                     console.log('WebSocket 연결됨');
+                    this.loadChatHistory();
                 };
 
                 this.chat.ws.onmessage = (event) => {
@@ -412,6 +413,26 @@ function app() {
             } catch (e) {
                 console.error('WebSocket 연결 실패:', e);
                 this.chat.connected = false;
+            }
+        },
+
+        /**
+         * 서버에서 대화 기록을 로드합니다.  [JS-W010.13]
+         */
+        async loadChatHistory() {
+            if (this.chat.messages.length > 0) return;
+            try {
+                const data = await this.api('GET', '/api/chat/history/default');
+                if (data && data.messages && data.messages.length > 0) {
+                    this.chat.messages = data.messages.map(m => ({
+                        role: m.role,
+                        content: m.content,
+                        time: '',
+                    }));
+                    this.$nextTick(() => this.scrollToBottom());
+                }
+            } catch (e) {
+                console.warn('대화 기록 로드 실패:', e);
             }
         },
 

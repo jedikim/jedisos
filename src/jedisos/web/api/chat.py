@@ -210,6 +210,14 @@ async def send_message(request: ChatRequest) -> ChatResponse:
     return ChatResponse(response=response, bank_id=request.bank_id)
 
 
+@router.get("/history/{bank_id}")  # [JS-W002.18]
+async def get_history(bank_id: str) -> dict[str, Any]:
+    """bank_id의 대화 기록을 반환합니다."""
+    _load_history()
+    messages = _conversation_history.get(bank_id, [])
+    return {"bank_id": bank_id, "messages": messages}
+
+
 @router.get("/connections")  # [JS-W002.6]
 async def get_connections() -> dict[str, Any]:
     """현재 WebSocket 연결 수를 반환합니다."""
