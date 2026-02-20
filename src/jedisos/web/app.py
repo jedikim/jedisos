@@ -453,9 +453,6 @@ async def _register_builtin_tools(  # [JS-W001.10]
                                         wrapped_tools.append(ToolDef(new_def))
                                         logger.info("skill_hotloaded", name=tname)
                                 _app_state.pop("_cached_agent", None)
-                                from jedisos.web.api.chat import clear_all_history
-
-                                clear_all_history()
                                 logger.info(
                                     "skill_created_bg",
                                     tool_name=result.tool_name,
@@ -529,7 +526,6 @@ async def _register_builtin_tools(  # [JS-W001.10]
             import re as _re
             import shutil
 
-            from jedisos.web.api.chat import clear_all_history
             from jedisos.web.api.skills import _scan_skills
 
             skill_name = arguments.get("name", "")
@@ -576,7 +572,6 @@ async def _register_builtin_tools(  # [JS-W001.10]
 
             # 캐시 무효화
             _app_state.pop("_cached_agent", None)
-            clear_all_history()
 
             # 메모리에 삭제 기록
             try:
@@ -657,9 +652,6 @@ async def _register_builtin_tools(  # [JS-W001.10]
                                 logger.info("skill_upgraded", name=tname)
 
                         _app_state.pop("_cached_agent", None)
-                        from jedisos.web.api.chat import clear_all_history
-
-                        clear_all_history()
 
                         msg = f"'{result.tool_name}' 스킬이 업그레이드되었습니다! 대화에서 바로 사용해보세요."
                         await _broadcast_notification("skill_upgraded", msg)

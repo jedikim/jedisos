@@ -103,9 +103,11 @@ WHEN TO USE:
 - ddgs (DuckDuckGo): For web search and NEWS search. Already installed, free, no API key.
   from ddgs import DDGS
   with DDGS() as ddgs:
-      results = list(ddgs.news(query, max_results=10))  # news search
-      results = list(ddgs.text(query, max_results=10))  # web search
-  Each result dict has: "title", "body"/"snippet", "href"/"url", "date" (news only).
+      results = list(ddgs.news(query, region="wt-wt", timelimit="d", max_results=10))  # news
+      results = list(ddgs.text(query, region="wt-wt", max_results=10))  # web search
+  IMPORTANT for ddgs.news(): ALWAYS pass region="wt-wt" and timelimit="d" (today), "w" (week), or "m" (month).
+  Without timelimit, results may include very old articles. Without region="wt-wt", Korean results are poor.
+  Each result dict has: "title", "body", "url"/"href", "source", "date" (news only).
   ALWAYS use ddgs for search/news features. NEVER use NewsAPI, GDELT, or other key-required services.
 - llm_complete for NLP: When the tool receives free-form natural language input that
   needs to be parsed/classified/interpreted before calling an API. ALWAYS prefer

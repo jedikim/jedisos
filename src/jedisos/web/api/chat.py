@@ -2,15 +2,19 @@
 [JS-W002] jedisos.web.api.chat
 WebSocket 기반 실시간 채팅 API
 
-version: 1.1.0
+version: 1.2.0
 created: 2026-02-18
-modified: 2026-02-18
+modified: 2026-02-20
 dependencies: fastapi>=0.115
 """
 
 from __future__ import annotations
 
+import contextlib
+import json
+import os
 from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -24,6 +28,50 @@ router = APIRouter()
 # bank_id별 대화 히스토리 캐시 (최근 N턴 유지)
 _MAX_HISTORY_TURNS = 20
 _conversation_history: dict[str, list[dict[str, str]]] = defaultdict(list)
+_history_loaded = False
+
+
+def _history_dir() -> Path:  # [JS-W002.14]
+    """대화 기록 저장 디렉토리."""
+    data_dir = Path(os.environ.get("JEDISOS_DATA_DIR", str(Path.home() / ".jedisos")))
+    d = data_dir / "chat_history"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _load_history() -> None:  # [JS-W002.15]
+    """서버 시작 시 디스크에서 대화 기록을 로드합니다."""
+    global _history_loaded
+    if _history_loaded:
+        return
+    _history_loaded = True
+
+    hdir = _history_dir()
+    loaded = 0
+    for fp in hdir.glob("*.json"):
+        try:
+            bank_id = fp.stem
+            data = json.loads(fp.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                _conversation_history[bank_id] = data[-_MAX_HISTORY_TURNS * 2 :]
+                loaded += 1
+        except Exception as e:
+            logger.warning("chat_history_load_failed", file=str(fp), error=str(e))
+
+    if loaded:
+        logger.info("chat_history_loaded", banks=loaded)
+
+
+def _save_history(bank_id: str) -> None:  # [JS-W002.16]
+    """bank_id의 대화 기록을 디스크에 저장합니다."""
+    try:
+        fp = _history_dir() / f"{bank_id}.json"
+        fp.write_text(
+            json.dumps(_conversation_history[bank_id], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        logger.warning("chat_history_save_failed", bank_id=bank_id, error=str(e))
 
 
 class ChatRequest(BaseModel):  # [JS-W002.1]
@@ -74,6 +122,7 @@ async def websocket_chat(websocket: WebSocket) -> None:
     응답: {"type": "stream", "content": "토큰"} 또는
           {"type": "done", "response": "전체 응답", "bank_id": "..."}
     """
+    _load_history()
     await manager.connect(websocket)
     try:
         # SecVault 상태 전송
@@ -146,21 +195,27 @@ async def get_connections() -> dict[str, Any]:
 
 def _get_history(bank_id: str) -> list[dict[str, str]]:  # [JS-W002.7]
     """bank_id별 대화 히스토리를 반환합니다."""
+    _load_history()
     return _conversation_history[bank_id]
 
 
 def _add_to_history(bank_id: str, role: str, content: str) -> None:  # [JS-W002.8]
-    """대화 히스토리에 메시지를 추가합니다."""
+    """대화 히스토리에 메시지를 추가하고 디스크에 저장합니다."""
     history = _conversation_history[bank_id]
     history.append({"role": role, "content": content})
     # 최대 턴 수 초과 시 오래된 메시지 제거 (2개씩 = user+assistant)
     while len(history) > _MAX_HISTORY_TURNS * 2:
         history.pop(0)
+    _save_history(bank_id)
 
 
 def clear_all_history() -> None:  # [JS-W002.10]
-    """모든 대화 히스토리를 초기화합니다. 스킬 추가/삭제 시 호출."""
+    """모든 대화 히스토리를 초기화합니다."""
     _conversation_history.clear()
+    # 디스크 파일도 삭제
+    for fp in _history_dir().glob("*.json"):
+        with contextlib.suppress(Exception):
+            fp.unlink()
     logger.info("conversation_history_cleared")
 
 
