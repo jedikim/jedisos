@@ -35,7 +35,7 @@ MAX_TOOL_CALLS = 10
 _SKILL_MGMT_TOOLS = frozenset({"create_skill", "list_skills", "delete_skill", "upgrade_skill"})
 _MEMORY_ONLY_INTENTS = frozenset({"chat", "question"})
 
-# 키워드 기반 skill_request 감지 — classify 모델이 놓칠 때 fallback
+# 키워드 기반 의도 분류 — LLM 호출 없이 빠르게 (0.001초)
 _SKILL_REQUEST_KEYWORDS = (
     "만들어",
     "만들어줘",
@@ -50,6 +50,18 @@ _SKILL_REQUEST_KEYWORDS = (
     "도구",
     "스킬",
     "기능",
+)
+_REMEMBER_KEYWORDS = ("기억해", "알아둬", "알아두", "잊지마", "메모해")
+_CHAT_KEYWORDS = (
+    "안녕",
+    "반가",
+    "ㅎㅎ",
+    "ㅋㅋ",
+    "고마워",
+    "감사",
+    "잘자",
+    "좋은 아침",
+    "좋은 저녁",
 )
 
 # 백그라운드 태스크 참조 (GC 방지)
@@ -392,29 +404,36 @@ class ReActAgent:  # [JS-E001.2]
         """
         bid = bank_id or "jedisos-default"
 
-        # 1. recall_memory (3초 타임아웃 — 느린 recall이 응답을 막지 않도록)
+        # 1. 메시지 준비 + 의도 빠른 판별 (키워드)
         messages: list[dict[str, str]] = []
         if history:
             messages.extend(history)
         messages.append({"role": "user", "content": user_message})
 
-        query_parts = [user_message]
-        if history:
-            for msg in reversed(history):
-                if msg.get("role") == "user" and msg.get("content"):
-                    query_parts.append(msg["content"])
-                    if len(query_parts) >= 2:
-                        break
+        msg_lower = user_message.lower()
+        skip_recall = any(kw in msg_lower for kw in _CHAT_KEYWORDS) or len(user_message) < 5
 
-        query = " ".join(reversed(query_parts))
+        # 2. recall_memory (인사/잡담은 스킵 → 0.5-2초 절약)
         memory_context = ""
-        try:
-            result = await asyncio.wait_for(self.memory.recall(query, bank_id=bid), timeout=3.0)
-            memory_context = result.get("context", "") if isinstance(result, dict) else str(result)
-        except TimeoutError:
-            logger.warning("recall_timeout", bank_id=bid)
-        except Exception as e:
-            logger.warning("recall_failed_continuing", error=str(e))
+        if not skip_recall:
+            query_parts = [user_message]
+            if history:
+                for msg in reversed(history):
+                    if msg.get("role") == "user" and msg.get("content"):
+                        query_parts.append(msg["content"])
+                        if len(query_parts) >= 2:
+                            break
+
+            query = " ".join(reversed(query_parts))
+            try:
+                result = await asyncio.wait_for(self.memory.recall(query, bank_id=bid), timeout=3.0)
+                memory_context = (
+                    result.get("context", "") if isinstance(result, dict) else str(result)
+                )
+            except TimeoutError:
+                logger.warning("recall_timeout", bank_id=bid)
+            except Exception as e:
+                logger.warning("recall_failed_continuing", error=str(e))
 
         # 2. 시스템 프롬프트 구성
         system_parts: list[str] = []
@@ -430,36 +449,41 @@ class ReActAgent:  # [JS-E001.2]
             role = _ROLE_MAP.get(msg.get("role", ""), msg.get("role", ""))
             llm_messages.append({"role": role, "content": msg.get("content", "")})
 
-        # 2.5. 의도 분류 (소형 모델 + 키워드 fallback)
+        # 2.5. 의도 분류 — 키워드 먼저 (0.001초), 애매하면 LLM (1-3초)
         llm_role = "chat"
         intent = "chat"
-        try:
-            raw_intent = await self.llm.complete_text(
-                prompt=f"사용자: {user_message}",
-                system=(
-                    "사용자 메시지의 의도를 한 단어로만 분류하세요.\n"
-                    "선택지: chat, question, remember, skill_request, complex\n"
-                    "- skill_request: 도구/스킬/기능을 만들어달라, 고쳐달라, 수정해달라는 요청\n"
-                    "- remember: 개인정보 저장 요청 (기억해, 알아둬)\n"
-                    "- complex: 분석, 비교, 추론이 필요한 복잡한 질문\n"
-                    "- question: 단순 정보 질문\n"
-                    "- chat: 인사, 잡담\n"
-                    "한 단어만 답하세요."
-                ),
-                role="classify",
-                max_tokens=10,
-                temperature=0.0,
-            )
-            intent = raw_intent.strip().lower().split()[0] if raw_intent else "chat"
-        except Exception as e:
-            logger.debug("intent_classify_failed", error=str(e))
 
-        # 키워드 fallback: classify 모델이 놓친 skill_request 감지
-        if intent in _MEMORY_ONLY_INTENTS:
-            msg_lower = user_message.lower()
-            if any(kw in msg_lower for kw in _SKILL_REQUEST_KEYWORDS):
-                intent = "skill_request"
-                logger.info("intent_keyword_override", original="chat", overridden="skill_request")
+        # 빠른 키워드 매칭 (LLM 호출 불필요한 90% 케이스)
+        if any(kw in msg_lower for kw in _SKILL_REQUEST_KEYWORDS):
+            intent = "skill_request"
+        elif any(kw in msg_lower for kw in _REMEMBER_KEYWORDS):
+            intent = "remember"
+        elif any(kw in msg_lower for kw in _CHAT_KEYWORDS) or len(user_message) < 10:
+            intent = "chat"
+        elif "?" in user_message or "뭐" in msg_lower or "어디" in msg_lower or "언제" in msg_lower:
+            intent = "question"
+        else:
+            # 키워드로 판단 불가 → LLM 분류 (10% 미만 케이스만)
+            try:
+                raw_intent = await self.llm.complete_text(
+                    prompt=f"사용자: {user_message}",
+                    system=(
+                        "사용자 메시지의 의도를 한 단어로만 분류하세요.\n"
+                        "선택지: chat, question, remember, skill_request, complex\n"
+                        "- skill_request: 도구/스킬/기능을 만들어달라, 고쳐달라, 수정해달라는 요청\n"
+                        "- remember: 개인정보 저장 요청 (기억해, 알아둬)\n"
+                        "- complex: 분석, 비교, 추론이 필요한 복잡한 질문\n"
+                        "- question: 단순 정보 질문\n"
+                        "- chat: 인사, 잡담\n"
+                        "한 단어만 답하세요."
+                    ),
+                    role="classify",
+                    max_tokens=10,
+                    temperature=0.0,
+                )
+                intent = raw_intent.strip().lower().split()[0] if raw_intent else "chat"
+            except Exception as e:
+                logger.debug("intent_classify_failed", error=str(e))
 
         if intent == "complex":
             llm_role = "reason"
