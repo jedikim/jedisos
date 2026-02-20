@@ -29,6 +29,20 @@ router = APIRouter()
 _MAX_HISTORY_TURNS = 20
 _conversation_history: dict[str, list[dict[str, str]]] = defaultdict(list)
 _history_loaded = False
+_detector: Any = None
+
+
+def _get_detector() -> Any:  # [JS-W002.17]
+    """민감 정보 감지기를 반환합니다 (lazy init)."""
+    global _detector
+    if _detector is not None:
+        return _detector
+    from jedisos.memory.signal_detector import SignalDetector
+
+    data_dir = Path(os.environ.get("JEDISOS_DATA_DIR", str(Path.home() / ".jedisos")))
+    patterns_path = data_dir / "memory" / "sensitive_patterns.yaml"
+    _detector = SignalDetector.from_yaml(patterns_path)
+    return _detector
 
 
 def _history_dir() -> Path:  # [JS-W002.14]
@@ -63,11 +77,20 @@ def _load_history() -> None:  # [JS-W002.15]
 
 
 def _save_history(bank_id: str) -> None:  # [JS-W002.16]
-    """bank_id의 대화 기록을 디스크에 저장합니다."""
+    """bank_id의 대화 기록을 디스크에 저장합니다. 민감 정보는 마스킹."""
     try:
+        detector = _get_detector()
+        sanitized = []
+        for msg in _conversation_history[bank_id]:
+            sanitized.append(
+                {
+                    "role": msg["role"],
+                    "content": detector.mask_sensitive(msg["content"]),
+                }
+            )
         fp = _history_dir() / f"{bank_id}.json"
         fp.write_text(
-            json.dumps(_conversation_history[bank_id], ensure_ascii=False, indent=2),
+            json.dumps(sanitized, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
     except Exception as e:
