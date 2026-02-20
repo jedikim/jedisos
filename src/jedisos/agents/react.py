@@ -456,8 +456,7 @@ class ReActAgent:  # [JS-E001.2]
         if intent == "complex":
             llm_role = "reason"
         elif intent == "skill_request":
-            # gemini-3.1-pro-preview는 tool streaming에서 hang되므로 chat(flash) 사용
-            llm_role = "chat"
+            llm_role = "code"
         logger.info("intent_classified", intent=intent, llm_role=llm_role)
 
         # 2.6. 의도별 도구 필터링 — 불필요한 도구 호출 방지 (47초→6초)

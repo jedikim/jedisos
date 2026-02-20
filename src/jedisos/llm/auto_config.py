@@ -3,7 +3,8 @@
 하드코딩 LLM 역할 배정 — Gemini 우선, GPT 폴백
 
 역할별 모델 매핑:
-- reason, code → gemini-3.1-pro-preview (폴백: gpt-5.2)
+- reason → gpt-5.2 (gemini-3.1-pro-preview 다운으로 대체)
+- code → gpt-5.2-codex (폴백: gpt-5.2)
 - chat, classify, extract → gemini-3-flash-preview (폴백: gpt-5.2)
 
 version: 5.0.0
@@ -31,8 +32,8 @@ ROLES = ("reason", "code", "chat", "classify", "extract")
 _CACHE_FILENAME = "model_roles.yaml"
 
 _HARDCODED_ROLES: dict[str, list[str]] = {
-    "reason": ["gemini/gemini-3.1-pro-preview", "gpt-5.2"],
-    "code": ["gemini/gemini-3.1-pro-preview", "gpt-5.2"],
+    "reason": ["gpt-5.2"],
+    "code": ["gpt-5.2-codex", "gpt-5.2"],
     "chat": ["gemini/gemini-3-flash-preview", "gpt-5.2"],
     "classify": ["gemini/gemini-3-flash-preview", "gpt-5.2"],
     "extract": ["gemini/gemini-3-flash-preview", "gpt-5.2"],
