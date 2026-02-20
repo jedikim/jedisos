@@ -58,11 +58,23 @@ class TestZvecMemoryRetain:  # [JS-T002.1]
         assert "안녕하세요" in content
         assert "[user]" in content
 
-    async def test_retain_detects_important_facts(self, memory: ZvecMemory) -> None:
+    async def test_retain_detects_important_facts_with_llm(self, memory: ZvecMemory) -> None:
+        """LLM 라우터가 있으면 사실 추출 + MEMORY.md 저장."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock_llm = MagicMock()
+        mock_llm.complete_text = AsyncMock(return_value='["이름: 김제다이"]')
+        memory.set_llm_router(mock_llm)
+
         result = await memory.retain("내 이름은 김제다이야", context="user")
-        assert result["facts_detected"] > 0
+        assert result["facts_detected"] == 1
         memory_content = read_file(memory.memory_dir / "MEMORY.md")
         assert "김제다이" in memory_content
+
+    async def test_retain_no_facts_without_llm(self, memory: ZvecMemory) -> None:
+        """LLM 라우터가 없으면 사실 추출 안 함."""
+        result = await memory.retain("내 이름은 김제다이야", context="user")
+        assert result["facts_detected"] == 0
 
     async def test_retain_with_bank_id(self, memory: ZvecMemory) -> None:
         result = await memory.retain("test", bank_id="custom-bank")
@@ -248,11 +260,6 @@ class TestSignalDetector:  # [JS-T002.7]
         result = d.mask_sensitive("키는 sk-1234567890abcdefghij 입니다")
         assert "sk-" not in result
         assert "***" in result
-
-    def test_detect_important_facts(self) -> None:
-        d = SignalDetector()
-        facts = d.detect_important_facts("내 이름은 김제다이야")
-        assert len(facts) >= 1
 
     def test_from_yaml(self, tmp_path: Path) -> None:
         create_default_patterns_yaml(tmp_path / "patterns.yaml")

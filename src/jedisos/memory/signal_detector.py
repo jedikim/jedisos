@@ -78,26 +78,6 @@ DEFAULT_PATTERNS: list[dict[str, str]] = [
     },
 ]
 
-# 중요 사실 키워드 패턴 (한국어 + 영어)
-IMPORTANT_FACT_KEYWORDS = [
-    # 이름
-    r"내\s*이름은?\s+(.+?)(?:이야|예요|입니다|이에요|야|[.\s]|$)",
-    # 생일/생년월일
-    r"(?:제|나의?)\s*(?:생일|생년월일)[은는이가]?\s+(.+?)(?:이야|예요|입니다|이에요|야|[.\s]|$)",
-    # 주소 (핵심)
-    r"(?:내|나의?|제)\s*주소[는은]?\s*(.+?)(?:\s*(?:인데|이야|이에요|예요|입니다|야)|$)",
-    # 거주지 (다중 단어 캡처)
-    r"(?:나는?|저는?)\s+(.+?)\s*(?:에서|에)\s*(?:살아|살고|거주)",
-    # 좋아/싫어/선호
-    r"(?:나는?|저는?)\s+(.+?)\s*(?:를|을)?\s*(?:좋아해|싫어해|좋아|싫어|선호)",
-    # "X 기억해" → X 전체 문장 캡처 (핵심 수정)
-    r"(.+?)\s+(?:기억해줘|기억해\s*줘|기억해|remember|잊지\s*마)",
-    # 전화번호
-    r"(?:내|나의?|제)\s*(?:전화|핸드폰|연락처|번호)[은는]?\s*(.+?)(?:\s|$)",
-    # 이메일
-    r"(?:내|나의?|제)\s*(?:이메일|메일)[은는]?\s*(\S+@\S+)",
-]
-
 
 class SensitiveMatch:  # [JS-B004.1]
     """민감 정보 매치 결과."""
@@ -121,7 +101,6 @@ class SignalDetector:  # [JS-B004.2]
         detector = SignalDetector.from_yaml(Path("sensitive_patterns.yaml"))
 
         matches = detector.detect_sensitive(text)
-        facts = detector.detect_important_facts(text)
     """
 
     def __init__(self, patterns: list[dict[str, str]] | None = None) -> None:
@@ -206,39 +185,6 @@ class SignalDetector:  # [JS-B004.2]
         for match in sorted(matches, key=lambda m: m.start, reverse=True):
             result = result[: match.start] + replacement + result[match.end :]
         return result
-
-    def detect_important_facts(self, text: str) -> list[str]:  # [JS-B004.6]
-        """텍스트에서 중요 사실/선호도를 감지합니다.
-
-        Args:
-            text: 검사할 텍스트
-
-        Returns:
-            감지된 중요 사실 리스트
-        """
-        # 키워드만 있는 의미없는 매치 제거용
-        _noise = {"기억해", "기억해줘", "remember", "잊지마", "잊지 마"}
-
-        facts: list[str] = []
-        seen: set[str] = set()
-        for pattern_str in IMPORTANT_FACT_KEYWORDS:
-            for m in re.finditer(pattern_str, text, re.IGNORECASE):
-                fact = m.group().strip()
-
-                # 질문은 사실이 아님
-                if fact.endswith("?") or fact.endswith("뭐지") or fact.endswith("뭐야"):
-                    continue
-
-                # 키워드만 있는 매치 제거
-                if fact.lower() in _noise or len(fact) < 4:
-                    continue
-
-                # 중복 제거
-                if fact in seen:
-                    continue
-                seen.add(fact)
-                facts.append(fact)
-        return facts
 
     def get_pattern_info(self) -> list[dict[str, Any]]:  # [JS-B004.7]
         """현재 로드된 패턴 정보를 반환합니다."""

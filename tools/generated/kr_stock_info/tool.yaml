@@ -1,6 +1,13 @@
 name: kr_stock_info
-description: "한국 주식(KOSPI/KOSDAQ) 종목명/티커로 실시간 시세 조회 + 지수 조회"
-version: "1.0.0"
-author: "jedisos"
-tags: ["finance", "stock", "kospi", "kosdaq", "korea"]
+version: 1.0.2
+description: 한국 주식(KOSPI/KOSDAQ) 종목명(삼성전자) 또는 6자리 티커(005930)로 실시간 현재가/등락/거래량/시가총액/PER
+  및 52주 최고가/최저가(가능 시 날짜 포함)를 조회합니다. 'KOSPI 지수', 'KOSDAQ 지수'도 조회 가능합니다.
+author: jedisos-agent
 auto_generated: true
+created: '2026-02-19'
+license: MIT
+tags:
+- stock
+- finance
+- korea
+- naver
