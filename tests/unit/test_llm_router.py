@@ -136,7 +136,8 @@ class TestLLMRouterCompleteText:  # [JS-T004.3]
 class TestPrompts:  # [JS-T004.4]
     def test_build_system_prompt_default(self):
         prompt = build_system_prompt()
-        assert prompt == SYSTEM_BASE
+        assert SYSTEM_BASE in prompt
+        assert "현재 시각:" in prompt
 
     def test_build_system_prompt_with_identity(self):
         prompt = build_system_prompt(identity="나는 JediSOS입니다")

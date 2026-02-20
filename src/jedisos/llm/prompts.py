@@ -173,12 +173,24 @@ def build_system_prompt(  # [JS-C002.1]
     Returns:
         조합된 시스템 프롬프트
     """
+    from datetime import datetime, timedelta, timezone
+
     parts: list[str] = []
 
     if identity:
         parts.append(identity)
     else:
         parts.append(SYSTEM_BASE)
+
+    # 현재 날짜/시간 (KST) 주입 — LLM 할루시네이션 방지
+    kst = timezone(timedelta(hours=9))
+    now = datetime.now(kst)
+    weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
+    day_name = weekdays[now.weekday()]
+    parts.append(
+        f"\n현재 시각: {now.strftime('%Y년 %m월 %d일')} {day_name}"
+        f" {now.strftime('%H시 %M분')} (KST, 한국 표준시)"
+    )
 
     if memory_context:
         parts.append(f"\n관련 기억:\n{memory_context}")
