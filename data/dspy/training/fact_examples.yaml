@@ -1,0 +1,79 @@
+# 사실추출 학습 데이터
+# 각 예시: conversation (대화 텍스트), facts (추출된 사실 리스트)
+
+examples:
+  # 이름 관련
+  - conversation: "user: 내 이름은 김제다이야 기억해"
+    facts: ["이름: 김제다이"]
+
+  - conversation: "user: 나 제다이라고 불러줘"
+    facts: ["별명: 제다이"]
+
+  # 주소 관련
+  - conversation: "user: 내 주소는 서울시 강남구 역삼동이야 기억해"
+    facts: ["주소: 서울시 강남구 역삼동"]
+
+  - conversation: "user: 나 경기도 남양주시 화도읍에 살아"
+    facts: ["거주지: 경기도 남양주시 화도읍"]
+
+  # 생일/기념일
+  - conversation: "user: 생일은 1월 15일이야"
+    facts: ["생일: 1월 15일"]
+
+  - conversation: "user: 결혼기념일은 6월 3일이야 알아둬"
+    facts: ["결혼기념일: 6월 3일"]
+
+  # 직업/학교
+  - conversation: "user: 나 구글에서 일해"
+    facts: ["직장: 구글"]
+
+  - conversation: "user: 소프트웨어 엔지니어야"
+    facts: ["직업: 소프트웨어 엔지니어"]
+
+  # 선호도
+  - conversation: "user: 좋아하는 색깔은 파란색이야"
+    facts: ["좋아하는 색깔: 파란색"]
+
+  - conversation: "user: 커피보다 녹차를 좋아해"
+    facts: ["음료 선호: 녹차 (커피보다)"]
+
+  - conversation: "user: 매운 음식을 못 먹어"
+    facts: ["음식 비선호: 매운 음식"]
+
+  # 가족/반려동물
+  - conversation: "user: 우리 강아지 이름은 초코야"
+    facts: ["반려동물: 강아지 (이름: 초코)"]
+
+  - conversation: "user: 딸이 둘 있어"
+    facts: ["가족: 딸 2명"]
+
+  # 연락처
+  - conversation: "user: 내 전화번호 메모해줘 010-1234-5678"
+    facts: ["전화번호: 010-1234-5678"]
+
+  - conversation: "user: 이메일은 jedi@example.com이야"
+    facts: ["이메일: jedi@example.com"]
+
+  # 복합 사실
+  - conversation: "user: 나는 김제다이고 서울에 살면서 구글에서 일해"
+    facts: ["이름: 김제다이", "거주지: 서울", "직장: 구글"]
+
+  # 사실 없음 (빈 리스트)
+  - conversation: "user: 안녕 오늘 날씨 좋다"
+    facts: []
+
+  - conversation: "user: 고마워 잘 알겠어"
+    facts: []
+
+  - conversation: "user: 파이썬이 뭐야?\nassistant: 파이썬은 프로그래밍 언어입니다."
+    facts: []
+
+  - conversation: "user: ㅋㅋㅋ 재밌다"
+    facts: []
+
+  # 질문은 사실이 아님
+  - conversation: "user: 내 이름이 뭐였지?"
+    facts: []
+
+  - conversation: "user: 내가 어디 산다고 했었지?"
+    facts: []

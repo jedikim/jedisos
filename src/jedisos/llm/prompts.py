@@ -2,9 +2,9 @@
 [JS-C002] jedisos.llm.prompts
 프롬프트 템플릿 관리
 
-version: 1.2.0
+version: 1.3.0
 created: 2026-02-16
-modified: 2026-02-18
+modified: 2026-02-20
 """
 
 from __future__ import annotations
@@ -54,6 +54,12 @@ JEDISOS_IDENTITY = """\
 - 일반 대화, 인사, 잡담에는 도구를 호출하지 마세요.
 - list_skills, upgrade_skill 등 관리 도구는 사용자가 직접 요청할 때만 사용하세요.
 
+## 절대 금지 (할루시네이션 방지)
+- **도구를 호출하지 않으면서 "만들고 있어요", "지금 준비 중이에요" 같은 말 금지**
+- 기능이 필요하면 반드시 **실제로 도구를 호출**하세요 (create_skill, search_mcp_servers 등)
+- 도구 호출 없이 행동을 묘사하면 사용자를 속이는 것입니다
+- 할 수 없는 일은 솔직하게 "이 기능은 아직 없어요"라고 말하세요
+
 ## 새 기능 추가 — MCP 서버 vs 스킬 생성
 
 사용자가 새로운 기능을 요청하면 아래 순서대로 처리하세요:
@@ -87,6 +93,71 @@ env에 빈 값("")이 있으면 사용자에게 "이 서버를 쓰려면 OO 키�
 - **delete_skill**: 스킬 삭제. 삭제 전 반드시 사용자에게 확인받기. "삭제할까요?"라고 물어본 후 동의하면 실행
 - **upgrade_skill**: 기존 스킬 수정/개선. 사용자가 "이 도구 고쳐줘", "기능 추가해줘" 등 요청 시 사용. 수정 사항을 instructions에 상세히 작성
 """
+
+
+def get_identity_prompt() -> str:  # [JS-C002.2]
+    """외부 YAML 프롬프트 → Python 상수 폴백으로 정체성 프롬프트를 반환합니다."""
+    from jedisos.llm.prompt_registry import get_registry
+
+    registry = get_registry()
+    if registry:
+        return registry.get_or_default("identity", "identity", default=JEDISOS_IDENTITY)
+    return JEDISOS_IDENTITY
+
+
+def get_system_base() -> str:  # [JS-C002.3]
+    """외부 YAML 프롬프트 → Python 상수 폴백으로 시스템 기본 프롬프트를 반환합니다."""
+    from jedisos.llm.prompt_registry import get_registry
+
+    registry = get_registry()
+    if registry:
+        return registry.get_or_default("identity", "system_base", default=SYSTEM_BASE)
+    return SYSTEM_BASE
+
+
+def get_intent_prompt() -> str:  # [JS-C002.4]
+    """외부 YAML 프롬프트 → 기본값 폴백으로 의도분류 프롬프트를 반환합니다."""
+    from jedisos.llm.prompt_registry import get_registry
+
+    _default = (
+        "사용자 메시지의 의도를 한 단어로만 분류하세요.\n"
+        "선택지: chat, question, remember, skill_request, complex\n"
+        "- skill_request: 도구/스킬/기능을 만들어달라, 고쳐달라, 수정해달라, 업그레이드해달라는 요청\n"
+        "- remember: 개인정보 저장 요청 (기억해, 알아둬, 메모해 등)\n"
+        "- complex: 분석, 비교, 추론, 계산이 필요한 복잡한 질문\n"
+        "- question: 사실 확인, 정보 질문, 기억을 묻는 질문\n"
+        "- chat: 순수 인사, 잡담, 감사 표현\n"
+        "한 단어만 답하세요."
+    )
+    registry = get_registry()
+    if registry:
+        return registry.get_or_default("intent_classifier", "classify", default=_default)
+    return _default
+
+
+def get_fact_prompt() -> str:  # [JS-C002.5]
+    """외부 YAML 프롬프트 → 기본값 폴백으로 사실추출 프롬프트를 반환합니다."""
+    from jedisos.llm.prompt_registry import get_registry
+
+    _default = (
+        "대화 텍스트에서 장기 기억할 가치가 있는 개인 사실만 추출하세요.\n"
+        "추출 대상: 이름, 주소, 생일, 전화번호, 이메일, 선호도, 중요한 개인정보\n"
+        "규칙:\n"
+        "- 구어체 조사(야, 이야, 예요, 임, 인데 등)를 제거하고 깨끗한 사실만 추출\n"
+        "- 질문은 사실이 아님 (제외)\n"
+        "- 인사, 잡담, AI 응답은 제외\n"
+        "- 사실이 없으면 빈 배열 반환\n"
+        '- JSON 배열만 출력: ["사실1", "사실2"]\n'
+        "예시:\n"
+        '입력: "내 주소는 서울시 강남구 역삼동이야 기억해"\n'
+        '출력: ["주소: 서울시 강남구 역삼동"]\n'
+        '입력: "안녕 오늘 날씨 좋다"\n'
+        "출력: []"
+    )
+    registry = get_registry()
+    if registry:
+        return registry.get_or_default("fact_extractor", "extract", default=_default)
+    return _default
 
 
 def build_system_prompt(  # [JS-C002.1]

@@ -1,0 +1,26 @@
+meta:
+  name: forge_test_gen
+  version: "1.0.0"
+  description: "Forge 런타임 테스트 케이스 생성 프롬프트"
+
+prompts:
+  template: |
+    Generate {count} test cases for a tool function.
+
+    Tool name: {tool_name}
+    Tool description: {tool_description}
+    Parameters: {parameters}
+
+    Rules:
+    1. Test case 1: Normal/happy-path with realistic input. If the tool handles Korean, use KOREAN text (e.g., "삼성전자 주가 알려줘", not "Samsung").
+    2. Test case 2: Edge case (empty string, boundary value, special characters)
+    3. Test case 3: Another valid input (different from #1), also in the tool's primary language.
+    4. All kwargs must match the function's parameter names and types exactly.
+    5. expect_error should be false for most cases (the tool should handle errors gracefully).
+    6. IMPORTANT: If the tool description is in Korean or mentions Korean data, ALL happy-path test inputs MUST use Korean text. Never use English translations.
+
+    Return a JSON array:
+    [
+      {{"description": "test description", "kwargs": {{"param": "value"}}, "expect_error": false}},
+      ...
+    ]

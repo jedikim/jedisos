@@ -146,6 +146,12 @@ class ZvecMemory:  # [JS-B001.1]
         # SecVault 클라이언트 (나중에 설정됨)
         self._vault_client: Any = None
 
+        # LLM 라우터 (사실 추출용, 나중에 설정됨)
+        self._llm_router: Any = None
+
+        # DSPy 브릿지 (사실 추출용, 나중에 설정됨)
+        self._dspy_bridge: Any = None
+
         logger.info(
             "zvec_memory_init",
             data_dir=str(self.data_dir),
@@ -175,6 +181,17 @@ class ZvecMemory:  # [JS-B001.1]
             self.memory_dir / "ENTITIES.md",
             "# 엔티티\n\n알려진 인물, 조직, 장소 등이 기록됩니다.\n\n",
         )
+
+    def set_llm_router(self, llm_router: Any) -> None:  # [JS-B001.1.3]
+        """LLM 라우터를 설정합니다 (사실 추출용)."""
+        self._llm_router = llm_router
+        logger.info("zvec_memory_llm_router_set")
+
+    def set_dspy_bridge(self, bridge: Any) -> None:  # [JS-B001.1.4]
+        """DSPy 브릿지를 설정합니다 (사실 추출용)."""
+        self._dspy_bridge = bridge
+        if bridge is not None:
+            logger.info("zvec_memory_dspy_bridge_set")
 
     def set_vault_client(self, client: Any) -> None:  # [JS-B001.1.2]
         """SecVault 클라이언트를 설정합니다.
@@ -223,8 +240,8 @@ class ZvecMemory:  # [JS-B001.1]
         log_path = get_daily_log_path(self.memory_dir)
         append_section(log_path, processed_content, role=role, bank_id=bid)
 
-        # 중요 사실 감지 → MEMORY.md
-        facts = self._detector.detect_important_facts(content)
+        # 중요 사실 추출 → MEMORY.md (LLM 기반, 폴백: 저장 안 함)
+        facts = await self._extract_facts_llm(content)
         if facts:
             memory_path = self.memory_dir / "MEMORY.md"
             for fact in facts:
@@ -307,6 +324,52 @@ class ZvecMemory:  # [JS-B001.1]
             "query": query,
             "bank_id": bid,
         }
+
+    async def _extract_facts_llm(self, content: str) -> list[str]:  # [JS-B001.4]
+        """대화에서 기억할 사실을 추출합니다 (3-Tier 폴백).
+
+        Tier 1: DSPy 모듈 (GEPA 최적화 포함)
+        Tier 2: LLMRouter + 외부 YAML/상수 프롬프트
+        Tier 3: 빈 리스트 (추출 안 함)
+
+        구어체 조사('야', '이야' 등)를 제거하고 깨끗한 사실만 반환합니다.
+        """
+        # Tier 1: DSPy 브릿지
+        if self._dspy_bridge is not None:
+            try:
+                return await self._dspy_bridge.extract_facts(content)
+            except Exception as e:
+                logger.debug("dspy_fact_extraction_failed", error=str(e))
+
+        # Tier 2: LLMRouter + YAML/상수 프롬프트
+        if self._llm_router is None:
+            return []
+
+        try:
+            import json as _json
+
+            from jedisos.llm.prompts import get_fact_prompt
+
+            system = get_fact_prompt()
+            raw = await self._llm_router.complete_text(
+                prompt=content,
+                system=system,
+                role="extract",
+                max_tokens=200,
+                temperature=0.0,
+            )
+
+            # JSON 파싱 (```json ... ``` 래핑 처리)
+            text = raw.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+            facts = _json.loads(text)
+            if isinstance(facts, list):
+                return [f.strip() for f in facts if isinstance(f, str) and len(f.strip()) >= 3]
+        except Exception as e:
+            logger.debug("fact_extraction_llm_failed", error=str(e))
+
+        return []
 
     async def _recall_fallback(self, query: str, bank_id: str) -> dict[str, Any]:
         """zvecsearch 없이 MEMORY.md에서 간단한 텍스트 검색을 수행합니다."""

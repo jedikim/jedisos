@@ -181,14 +181,15 @@ def _get_or_create_agent() -> Any:  # [JS-W002.9]
         return None
 
     from jedisos.agents.react import ReActAgent
-    from jedisos.llm.prompts import JEDISOS_IDENTITY
+    from jedisos.llm.prompts import get_identity_prompt
 
     agent = ReActAgent(
         memory=memory,
         llm=llm,
         tools=state.get("builtin_tools", []),
         tool_executor=state.get("tool_executor"),
-        identity_prompt=JEDISOS_IDENTITY,
+        identity_prompt=get_identity_prompt(),
+        dspy_bridge=state.get("dspy_bridge"),
     )
     state["_cached_agent"] = agent
     logger.info("agent_cached", tool_count=len(agent.tools))

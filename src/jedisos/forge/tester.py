@@ -303,12 +303,26 @@ class SkillTester:  # [JS-K002.2]
         """
         import litellm
 
-        prompt = RUNTIME_TEST_PROMPT.format(
-            count=count,
-            tool_name=tool_name,
-            tool_description=tool_description,
-            parameters=json.dumps(parameters, ensure_ascii=False),
-        )
+        from jedisos.llm.prompt_registry import get_registry
+
+        registry = get_registry()
+        if registry:
+            prompt = registry.get_or_default(
+                "forge_test_gen",
+                "template",
+                default=RUNTIME_TEST_PROMPT,
+                count=str(count),
+                tool_name=tool_name,
+                tool_description=tool_description,
+                parameters=json.dumps(parameters, ensure_ascii=False),
+            )
+        else:
+            prompt = RUNTIME_TEST_PROMPT.format(
+                count=count,
+                tool_name=tool_name,
+                tool_description=tool_description,
+                parameters=json.dumps(parameters, ensure_ascii=False),
+            )
 
         try:
             response = await litellm.acompletion(

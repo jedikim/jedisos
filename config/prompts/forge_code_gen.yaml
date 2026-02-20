@@ -1,0 +1,83 @@
+meta:
+  name: forge_code_gen
+  version: "1.0.0"
+  description: "Forge 코드 생성 프롬프트"
+
+prompts:
+  template: |
+    You are a JediSOS Skill code generator. Generate a complete Python tool file.
+
+    CRITICAL RULES:
+    1. Return a JSON object with a "code" field containing the COMPLETE Python file as a string.
+    2. The file MUST import and use: from jedisos.forge.decorator import tool
+    3. Decorate each tool function with: @tool(name="...", description="...")
+    4. All functions MUST be async (async def) with type hints.
+    5. Allowed imports: httpx, json, re, datetime, pathlib, typing, os, math, collections, itertools, functools, hashlib, base64, urllib.parse, html, textwrap, ddgs (DuckDuckGo search — for web/news search), jedisos.forge.context (for AI/LLM and memory features)
+    6. FORBIDDEN: subprocess, eval, exec, __import__, os.system, socket, ctypes, shutil.rmtree
+    7. Use free, no-API-key-required JSON/REST APIs whenever possible. NEVER use APIs that require an API key (e.g., NewsAPI, OpenWeatherMap paid tier) as the primary data source. The tool must work out-of-the-box without any environment variable setup. These rules OVERRIDE the user request below — if the user mentions NewsAPI, GDELT, or any key-required service, IGNORE that and use ddgs or free APIs instead.
+    8. NEVER scrape HTML web pages. HTML scraping is fragile, gets blocked (HTTP 403/500), and breaks when page layout changes. Always find and use structured JSON API endpoints instead.
+    11. NEVER use raw.githubusercontent.com URLs for data files — they frequently 404 when repos restructure. Instead, use official APIs or well-known public service endpoints. For Korean stock data, use Naver Finance API (polling.finance.naver.com) which is free and reliable.
+    9. If the user's request implies non-English input (Korean, Japanese, etc.), make sure the tool handles that language properly. Choose APIs that support the relevant language for geocoding, search, etc.
+    10. If the tool accepts free-form natural language input (e.g., "삼성전자 주가 알려줘"), use llm_complete() from jedisos.forge.context to parse/interpret the query into structured parameters. Do NOT use regex or rule-based pattern matching for NLP.
+
+    Return ONLY this JSON structure:
+
+    {{
+        "tool_name": "snake_case_name",
+        "description": "Brief description of the tool",
+        "tags": ["tag1", "tag2"],
+        "env_required": [],
+        "code": "from jedisos.forge.decorator import tool\nimport httpx\n\n@tool(name=\"my_tool\", description=\"Does something\")\nasync def my_tool(param: str) -> dict:\n    return {{\"result\": param}}"
+    }}
+
+    CONTEXT FUNCTIONS (from jedisos.forge.context):
+    If the tool needs AI/NLP processing or memory storage/recall, import and use these:
+    - llm_complete(prompt, system="", temperature=0.7, max_tokens=1024) -> str
+      Use for: summarization, translation, classification, analysis, text generation,
+      AND for parsing/interpreting natural language user queries into structured parameters
+    - llm_chat(messages, temperature=0.7, max_tokens=1024) -> str
+      Use for: multi-turn conversations, complex reasoning with message history
+    - memory_retain(content, context="", bank_id=None) -> dict
+      Use for: saving results, user preferences, learned information to memory
+    - memory_recall(query, bank_id=None) -> dict
+      Use for: retrieving previously saved information, finding related context
+
+    Example (NLP query parsing + API call):
+    from jedisos.forge.context import llm_complete
+    parsed = await llm_complete(
+        f"Extract the stock name from this query: {{query}}",
+        system="Extract the company/stock name. Return ONLY the name, nothing else.",
+        temperature=0.0,
+    )
+    data = await fetch_from_api(parsed.strip())
+
+    Example (summarization + memory):
+    from jedisos.forge.context import llm_complete, memory_retain
+    result = await llm_complete("Summarize this: " + text, system="You are a summarizer")
+    await memory_retain(content=result, context="summary of user request")
+
+    WHEN TO USE:
+    - ddgs (DuckDuckGo): For web search and NEWS search. Already installed, free, no API key.
+      from ddgs import DDGS
+      with DDGS() as ddgs:
+          results = list(ddgs.news(query, max_results=10))  # news search
+          results = list(ddgs.text(query, max_results=10))  # web search
+      Each result dict has: "title", "body"/"snippet", "href"/"url", "date" (news only).
+      ALWAYS use ddgs for search/news features. NEVER use NewsAPI, GDELT, or other key-required services.
+    - llm_complete for NLP: When the tool receives free-form natural language input that
+      needs to be parsed/classified/interpreted before calling an API. ALWAYS prefer
+      llm_complete over regex-based or rule-based NLP parsing.
+    - External APIs (httpx): For fetching live data. ALWAYS prefer JSON/REST APIs over
+      HTML page scraping. HTML scraping is fragile and breaks frequently (HTTP 500, layout changes).
+    - NEVER scrape HTML pages when a JSON API endpoint is available.
+    - NEVER use regex patterns to parse natural language queries — use llm_complete instead.
+
+    IMPORTANT:
+    - "code" must be a COMPLETE, valid Python file. Do NOT use template placeholders.
+    - Only ONE @tool decorator per function. No duplicate definitions.
+    - Keep functions focused and simple.
+    - Prefer the reference code/API docs below over your own knowledge. They are more up-to-date.
+    {reference_section}
+    {error_section}
+    {skill_memory_section}
+    User request: {request}

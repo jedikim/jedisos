@@ -63,7 +63,7 @@ def _load_env_from_data_dir() -> None:  # [JS-W001.7]
 async def _start_channels() -> None:  # [JS-W001.8]
     """설정된 채널 봇을 백그라운드로 시작합니다."""
     from jedisos.agents.react import ReActAgent
-    from jedisos.llm.prompts import JEDISOS_IDENTITY
+    from jedisos.llm.prompts import get_identity_prompt
 
     memory = _app_state.get("memory")
     llm = _app_state.get("llm")
@@ -80,7 +80,8 @@ async def _start_channels() -> None:  # [JS-W001.8]
         llm=llm,
         tools=builtin_tools,
         tool_executor=tool_executor,
-        identity_prompt=JEDISOS_IDENTITY,
+        identity_prompt=get_identity_prompt(),
+        dspy_bridge=_app_state.get("dspy_bridge"),
     )
 
     # Telegram
@@ -923,8 +924,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # [JS-W001.1]
     vault_client = SecVaultClient(secvault_dir)
     _app_state["vault_client"] = vault_client
 
-    # 메모리에 SecVault 클라이언트 연결
+    # 메모리에 SecVault 클라이언트 + LLM 라우터 연결
     memory.set_vault_client(vault_client)
+    memory.set_llm_router(llm)
 
     # SecVault 상태 확인 (소켓 준비 대기)
     for _retry in range(20):
@@ -938,6 +940,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # [JS-W001.1]
     else:
         _app_state["vault_status"] = "unavailable"
         logger.warning("secvault_daemon_not_ready")
+
+    # PromptRegistry 초기화
+    from jedisos.llm.prompt_registry import PromptRegistry, set_registry
+
+    prompts_dir = data_dir / "config" / "prompts"
+    if not prompts_dir.exists():
+        # 프로젝트 루트의 config/prompts도 시도
+        alt_prompts_dir = Path(__file__).parent.parent.parent.parent / "config" / "prompts"
+        if alt_prompts_dir.exists():
+            prompts_dir = alt_prompts_dir
+    if prompts_dir.exists():
+        prompt_registry = PromptRegistry(prompts_dir=prompts_dir)
+        set_registry(prompt_registry)
+        logger.info("prompt_registry_initialized", dir=str(prompts_dir))
+
+    # DSPyBridge 초기화 (dspy 미설치 시 스킵)
+    dspy_bridge = None
+    try:
+        from jedisos.dspy_modules.bridge import DSPyBridge
+
+        dspy_bridge = DSPyBridge(llm_router=llm, data_dir=data_dir)
+        dspy_bridge.initialize()
+        logger.info("dspy_bridge_initialized")
+    except ImportError:
+        logger.info("dspy_not_installed_skipping")
+    except Exception as e:
+        logger.warning("dspy_bridge_init_failed", error=str(e))
+
+    _app_state["dspy_bridge"] = dspy_bridge
+
+    # 메모리에 DSPy 브릿지 연결
+    memory.set_dspy_bridge(dspy_bridge)
 
     # 멀티티어 LLM 자동 구성 (모델 조회 → 역할 배정)
     try:

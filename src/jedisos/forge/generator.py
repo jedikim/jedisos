@@ -360,8 +360,18 @@ class SkillGenerator:  # [JS-K001.3]
             검색 쿼리 리스트 (2-3개)
         """
         try:
+            from jedisos.llm.prompt_registry import get_registry
+
+            registry = get_registry()
+            if registry:
+                query_prompt = registry.get_or_default(
+                    "forge_query_gen", "template", default=QUERY_GEN_PROMPT, request=request
+                )
+            else:
+                query_prompt = QUERY_GEN_PROMPT.format(request=request)
+
             messages = [
-                {"role": "user", "content": QUERY_GEN_PROMPT.format(request=request)},
+                {"role": "user", "content": query_prompt},
             ]
             if self.llm_router:
                 result = await self.llm_router.complete(
@@ -693,7 +703,17 @@ class SkillGenerator:  # [JS-K001.3]
                 "--- END HISTORY ---\n"
             )
 
-        prompt = CODE_GEN_PROMPT.format(
+        from jedisos.llm.prompt_registry import get_registry
+
+        registry = get_registry()
+        if registry:
+            prompt_tpl = registry.get_or_default(
+                "forge_code_gen", "template", default=CODE_GEN_PROMPT
+            )
+        else:
+            prompt_tpl = CODE_GEN_PROMPT
+
+        prompt = prompt_tpl.format(
             request=request,
             reference_section=reference_section,
             error_section=error_section,

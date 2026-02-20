@@ -31,38 +31,11 @@ logger = structlog.get_logger()
 MAX_TOOL_CALLS = 10
 
 # 의도별 도구 필터링 — 불필요한 도구를 제공하면 LLM이 도구를 남용함
-# "chat"/"question" → 메모리 도구 + 동적 스킬만 (스킬 관리 도구 제외)
-_SKILL_MGMT_TOOLS = frozenset({"create_skill", "list_skills", "delete_skill", "upgrade_skill"})
+# "chat"/"question" → 스킬 관리(목록/삭제/업그레이드) 도구만 제외
+# create_skill, search_mcp_servers는 항상 제공 (새 기능 요청 대응)
+_SKILL_MGMT_TOOLS = frozenset({"list_skills", "delete_skill", "upgrade_skill"})
 _MEMORY_ONLY_INTENTS = frozenset({"chat", "question"})
 
-# 키워드 기반 의도 분류 — LLM 호출 없이 빠르게 (0.001초)
-_SKILL_REQUEST_KEYWORDS = (
-    "만들어",
-    "만들어줘",
-    "추가해",
-    "추가해줘",
-    "고쳐",
-    "고쳐줘",
-    "수정해",
-    "수정해줘",
-    "개선해",
-    "업그레이드",
-    "도구",
-    "스킬",
-    "기능",
-)
-_REMEMBER_KEYWORDS = ("기억해", "알아둬", "알아두", "잊지마", "메모해")
-_CHAT_KEYWORDS = (
-    "안녕",
-    "반가",
-    "ㅎㅎ",
-    "ㅋㅋ",
-    "고마워",
-    "감사",
-    "잘자",
-    "좋은 아침",
-    "좋은 저녁",
-)
 
 # 백그라운드 태스크 참조 (GC 방지)
 _background_tasks: set[asyncio.Task[None]] = set()
@@ -110,6 +83,7 @@ class ReActAgent:  # [JS-E001.2]
         tool_executor: Any | None = None,
         pdp: PolicyDecisionPoint | None = None,
         audit: AuditLogger | None = None,
+        dspy_bridge: Any | None = None,
     ) -> None:
         self.memory = memory
         self.llm = llm
@@ -118,6 +92,7 @@ class ReActAgent:  # [JS-E001.2]
         self.tool_executor = tool_executor
         self.pdp = pdp
         self.audit = audit
+        self.dspy_bridge = dspy_bridge
         self.graph = self._build_graph()
 
     def _build_graph(self) -> Any:  # [JS-E001.3]
@@ -410,30 +385,30 @@ class ReActAgent:  # [JS-E001.2]
             messages.extend(history)
         messages.append({"role": "user", "content": user_message})
 
-        msg_lower = user_message.lower()
-        skip_recall = any(kw in msg_lower for kw in _CHAT_KEYWORDS) or len(user_message) < 5
-
-        # 2. recall_memory (인사/잡담은 스킵 → 0.5-2초 절약)
+        # 2. recall_memory — 항상 실행 (1.5초 타임아웃)
         memory_context = ""
-        if not skip_recall:
-            query_parts = [user_message]
-            if history:
-                for msg in reversed(history):
-                    if msg.get("role") == "user" and msg.get("content"):
-                        query_parts.append(msg["content"])
-                        if len(query_parts) >= 2:
-                            break
+        query_parts = [user_message]
+        if history:
+            for msg in reversed(history):
+                if msg.get("role") == "user" and msg.get("content"):
+                    query_parts.append(msg["content"])
+                    if len(query_parts) >= 2:
+                        break
 
-            query = " ".join(reversed(query_parts))
-            try:
-                result = await asyncio.wait_for(self.memory.recall(query, bank_id=bid), timeout=1.5)
-                memory_context = (
-                    result.get("context", "") if isinstance(result, dict) else str(result)
-                )
-            except TimeoutError:
-                logger.warning("recall_timeout", bank_id=bid)
-            except Exception as e:
-                logger.warning("recall_failed_continuing", error=str(e))
+        query = " ".join(reversed(query_parts))
+        try:
+            result = await asyncio.wait_for(self.memory.recall(query, bank_id=bid), timeout=1.5)
+            memory_context = result.get("context", "") if isinstance(result, dict) else str(result)
+            logger.info(
+                "recall_result",
+                bank_id=bid,
+                context_len=len(memory_context),
+                has_context=bool(memory_context),
+            )
+        except TimeoutError:
+            logger.warning("recall_timeout", bank_id=bid)
+        except Exception as e:
+            logger.warning("recall_failed_continuing", error=str(e))
 
         # 2. 시스템 프롬프트 구성
         system_parts: list[str] = []
@@ -449,41 +424,34 @@ class ReActAgent:  # [JS-E001.2]
             role = _ROLE_MAP.get(msg.get("role", ""), msg.get("role", ""))
             llm_messages.append({"role": role, "content": msg.get("content", "")})
 
-        # 2.5. 의도 분류 — 키워드 먼저 (0.001초), 애매하면 LLM (1-3초)
+        # 2.5. 의도 분류 — DSPy > YAML 폴백 > 기본값 (3-Tier)
         llm_role = "chat"
         intent = "chat"
 
-        # 빠른 키워드 매칭 (LLM 호출 불필요한 90% 케이스)
-        if any(kw in msg_lower for kw in _SKILL_REQUEST_KEYWORDS):
-            intent = "skill_request"
-        elif any(kw in msg_lower for kw in _REMEMBER_KEYWORDS):
-            intent = "remember"
-        elif any(kw in msg_lower for kw in _CHAT_KEYWORDS) or len(user_message) < 10:
-            intent = "chat"
-        elif "?" in user_message or "뭐" in msg_lower or "어디" in msg_lower or "언제" in msg_lower:
-            intent = "question"
-        else:
-            # 키워드로 판단 불가 → LLM 분류 (10% 미만 케이스만)
-            try:
-                raw_intent = await self.llm.complete_text(
-                    prompt=f"사용자: {user_message}",
-                    system=(
-                        "사용자 메시지의 의도를 한 단어로만 분류하세요.\n"
-                        "선택지: chat, question, remember, skill_request, complex\n"
-                        "- skill_request: 도구/스킬/기능을 만들어달라, 고쳐달라, 수정해달라는 요청\n"
-                        "- remember: 개인정보 저장 요청 (기억해, 알아둬)\n"
-                        "- complex: 분석, 비교, 추론이 필요한 복잡한 질문\n"
-                        "- question: 단순 정보 질문\n"
-                        "- chat: 인사, 잡담\n"
-                        "한 단어만 답하세요."
+        try:
+            if self.dspy_bridge:
+                # Tier 1: DSPy 모듈 (GEPA 최적화 포함)
+                intent = await asyncio.wait_for(
+                    self.dspy_bridge.classify_intent(user_message), timeout=3.0
+                )
+            else:
+                # Tier 2/3: YAML 프롬프트 → Python 상수 폴백
+                from jedisos.llm.prompts import get_intent_prompt
+
+                system = get_intent_prompt()
+                raw_intent = await asyncio.wait_for(
+                    self.llm.complete_text(
+                        prompt=f"사용자: {user_message}",
+                        system=system,
+                        role="classify",
+                        max_tokens=10,
+                        temperature=0.0,
                     ),
-                    role="classify",
-                    max_tokens=10,
-                    temperature=0.0,
+                    timeout=3.0,
                 )
                 intent = raw_intent.strip().lower().split()[0] if raw_intent else "chat"
-            except Exception as e:
-                logger.debug("intent_classify_failed", error=str(e))
+        except Exception as e:
+            logger.debug("intent_classify_failed", error=str(e))
 
         if intent == "complex":
             llm_role = "reason"

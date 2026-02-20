@@ -220,7 +220,19 @@ async def _assign_for_provider(  # [JS-C003.5]
         for m in models
     )
 
-    prompt = _ROLE_PROMPT.format(models_text=models_text, research_text=research_text)
+    from jedisos.llm.prompt_registry import get_registry
+
+    registry = get_registry()
+    if registry:
+        prompt = registry.get_or_default(
+            "auto_config_roles",
+            "template",
+            default=_ROLE_PROMPT,
+            models_text=models_text,
+            research_text=research_text,
+        )
+    else:
+        prompt = _ROLE_PROMPT.format(models_text=models_text, research_text=research_text)
 
     try:
         resp = await litellm.acompletion(

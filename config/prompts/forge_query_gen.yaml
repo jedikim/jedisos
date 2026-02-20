@@ -1,0 +1,21 @@
+meta:
+  name: forge_query_gen
+  version: "1.0.0"
+  description: "Forge 검색 쿼리 생성 프롬프트"
+
+prompts:
+  template: |
+    Extract 2-3 focused web search queries to find reference code and API docs for building the following tool. Each query should target a different aspect.
+
+    User request: {request}
+
+    Rules:
+    - Query 1: Find a working code example (Python preferred)
+    - Query 2: Find the specific API documentation or library for the core feature
+    - Query 3 (optional): If there's a language/locale challenge (e.g., Korean input), search specifically for that
+    - Each query should be concise (5-10 words)
+    - Include "python" in at least one query
+    - Include "free" or "no API key" if relevant
+
+    Return a JSON array of query strings:
+    ["query 1", "query 2", "query 3"]

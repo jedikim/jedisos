@@ -434,5 +434,86 @@ def market_remove(
         raise typer.Exit(1) from e
 
 
+@app.command()  # [JS-H001.9]
+def optimize(
+    task: Annotated[
+        str,
+        typer.Option("--task", "-t", help="최적화 대상: intent, facts, all"),
+    ] = "all",
+    auto: Annotated[
+        str,
+        typer.Option("--auto", "-a", help="GEPA 자동 수준: light, medium, heavy"),
+    ] = "light",
+    model: Annotated[
+        str,
+        typer.Option("--model", "-m", help="최적화에 사용할 LLM 모델"),
+    ] = "gpt-5.2",
+    data_dir: Annotated[
+        Path,
+        typer.Option("--data-dir", "-d", help="데이터 디렉토리 (data/dspy)"),
+    ] = Path("data/dspy"),
+) -> None:
+    """DSPy 모듈을 GEPA로 최적화합니다.
+
+    예시:
+      jedisos optimize --task intent --auto light
+      jedisos optimize --task facts --auto medium
+      jedisos optimize --task all
+    """
+    try:
+        from jedisos.dspy_modules.optimize import (
+            optimize_fact_extractor,
+            optimize_intent_classifier,
+        )
+    except ImportError:
+        err_console.print(
+            '[red]dspy가 설치되어 있지 않습니다.[/red]\npip install "dspy>=3.1.0" 으로 설치하세요.',
+            style="red",
+        )
+        raise typer.Exit(1) from None
+
+    results: list[tuple[str, dict]] = []
+
+    if task in ("intent", "all"):
+        console.print("[cyan]의도분류 모듈 최적화 시작...[/cyan]")
+        result = optimize_intent_classifier(data_dir, model=model, auto=auto)
+        results.append(("intent", result))
+        if result.get("success"):
+            console.print(
+                f"[green]의도분류 최적화 완료![/green] "
+                f"({result['examples']}개 예시, {result['output_path']})"
+            )
+        else:
+            console.print(
+                f"[red]의도분류 최적화 실패:[/red] {result.get('error', '알 수 없는 오류')}"
+            )
+
+    if task in ("facts", "all"):
+        console.print("[cyan]사실추출 모듈 최적화 시작...[/cyan]")
+        result = optimize_fact_extractor(data_dir, model=model, auto=auto)
+        results.append(("facts", result))
+        if result.get("success"):
+            console.print(
+                f"[green]사실추출 최적화 완료![/green] "
+                f"({result['examples']}개 예시, {result['output_path']})"
+            )
+        else:
+            console.print(
+                f"[red]사실추출 최적화 실패:[/red] {result.get('error', '알 수 없는 오류')}"
+            )
+
+    # 요약
+    success_count = sum(1 for _, r in results if r.get("success"))
+    total_count = len(results)
+    if total_count > 0:
+        console.print()
+        if success_count == total_count:
+            console.print(f"[bold green]전체 {total_count}개 모듈 최적화 성공[/bold green]")
+        else:
+            console.print(
+                f"[bold yellow]{success_count}/{total_count}개 모듈 최적화 성공[/bold yellow]"
+            )
+
+
 if __name__ == "__main__":
     app()

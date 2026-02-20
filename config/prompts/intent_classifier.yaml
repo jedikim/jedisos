@@ -1,0 +1,15 @@
+meta:
+  name: intent_classifier
+  version: "1.0.0"
+  description: "의도분류 프롬프트 — DSPy 미최적화 시 폴백"
+
+prompts:
+  classify: |
+    사용자 메시지의 의도를 한 단어로만 분류하세요.
+    선택지: chat, question, remember, skill_request, complex
+    - skill_request: 도구/스킬/기능을 만들어달라, 고쳐달라, 수정해달라, 업그레이드해달라는 요청
+    - remember: 개인정보 저장 요청 (기억해, 알아둬, 메모해 등)
+    - complex: 분석, 비교, 추론, 계산이 필요한 복잡한 질문
+    - question: 사실 확인, 정보 질문, 기억을 묻는 질문
+    - chat: 순수 인사, 잡담, 감사 표현
+    한 단어만 답하세요.

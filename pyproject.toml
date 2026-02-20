@@ -33,6 +33,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dspy = [
+    "dspy>=3.1.0",
+]
 channels = [
     "python-telegram-bot>=22.6",
     "discord.py>=2.6.4",
