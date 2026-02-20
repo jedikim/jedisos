@@ -50,14 +50,19 @@ class DSPyBridge:  # [JS-N003.1]
         classify_models = self._router.models_for("classify") or self._router.models
         extract_models = self._router.models_for("extract") or self._router.models
 
-        self._classify_lm = dspy.LM(model=classify_models[0], temperature=0.0, max_tokens=20)
-        self._extract_lm = dspy.LM(model=extract_models[0], temperature=0.0, max_tokens=300)
+        self._classify_lm = dspy.LM(model=classify_models[0], temperature=0.0, max_tokens=1000)
+        self._extract_lm = dspy.LM(model=extract_models[0], temperature=0.0, max_tokens=1000)
 
         self._intent = IntentClassifier()
         self._facts = FactExtractor()
 
-        # GEPA 최적화 상태 로드 (있으면)
-        intent_path = self._dspy_dir / "intent_classifier.json"
+        from jedisos.dspy_modules import model_safe_name
+
+        # GEPA 최적화 상태 로드 — 모델별 파일 우선, 레거시 폴백
+        classify_safe = model_safe_name(classify_models[0])
+        intent_path = self._dspy_dir / f"intent_classifier_{classify_safe}.json"
+        if not intent_path.exists():
+            intent_path = self._dspy_dir / "intent_classifier.json"
         if intent_path.exists():
             try:
                 self._intent.load(str(intent_path))
@@ -65,7 +70,10 @@ class DSPyBridge:  # [JS-N003.1]
             except Exception as e:
                 logger.warning("dspy_intent_load_failed", error=str(e))
 
-        fact_path = self._dspy_dir / "fact_extractor.json"
+        extract_safe = model_safe_name(extract_models[0])
+        fact_path = self._dspy_dir / f"fact_extractor_{extract_safe}.json"
+        if not fact_path.exists():
+            fact_path = self._dspy_dir / "fact_extractor.json"
         if fact_path.exists():
             try:
                 self._facts.load(str(fact_path))

@@ -24,7 +24,7 @@ examples:
     intent: "question"
   - message: "파이썬이 뭐야?"
     intent: "question"
-  - message: "오늘 뉴스 뭐 있어?"
+  - message: "1 더하기 1은?"
     intent: "question"
 
   # remember — 개인정보 저장 요청
@@ -39,7 +39,7 @@ examples:
   - message: "내 전화번호 메모해줘 010-1234-5678"
     intent: "remember"
 
-  # skill_request — 도구/스킬 생성/수정 요청
+  # skill_request — 도구/스킬 생성/수정 요청 + 현재 도구가 없는 기능 요청
   - message: "날씨 도구 만들어줘"
     intent: "skill_request"
   - message: "뉴스 검색 기능 추가해줘"
@@ -50,15 +50,23 @@ examples:
     intent: "skill_request"
   - message: "환율 계산기 업그레이드해줘"
     intent: "skill_request"
+  - message: "오늘 뉴스 알려줘"
+    intent: "skill_request"
+  - message: "최신 뉴스 뭐 있어?"
+    intent: "skill_request"
 
   # complex — 분석, 비교, 추론, 계산
   - message: "파이썬과 자바 비교해줘"
     intent: "complex"
   - message: "이 코드의 시간복잡도를 분석해줘"
     intent: "complex"
+  - message: "시간복잡도 분석해줘"
+    intent: "complex"
   - message: "100만원을 연 5%로 10년 투자하면 얼마야?"
     intent: "complex"
   - message: "한국 경제 전망을 분석해줘"
     intent: "complex"
   - message: "GPT-5와 Gemini 3 중 어떤 게 더 나아?"
+    intent: "complex"
+  - message: "React와 Vue 장단점 비교"
     intent: "complex"

@@ -43,8 +43,8 @@ class LLMConfig(BaseSettings):  # [JS-A002.2]
 
     models: list[str] = Field(
         default=[
+            "gemini/gemini-3-flash-preview",
             "gpt-5.2",
-            "gemini/gemini-3-flash",
         ],
         description="폴백 순서대로 나열. 첫 번째가 1차 모델",
     )

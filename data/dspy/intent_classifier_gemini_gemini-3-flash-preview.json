@@ -1,0 +1,28 @@
+{
+  "predict": {
+    "traces": [],
+    "train": [],
+    "demos": [],
+    "signature": {
+      "instructions": "Classify the user message intent into exactly one of the following categories:\n\n- complex: Use this for requests requiring deep analysis, comparative evaluations (e.g., comparing future AI models), economic outlooks, strategic reasoning, or mathematical projections/simulations (e.g., compound interest calculations).\n- question: Use this for straightforward factual lookups, real-time data retrieval (weather, current stock prices), or retrieval of personal/known data points.\n- skill_request: Use this when the user asks to fix/modify a tool OR when the user triggers a specific functional service or plugin-like feature, such as fetching the latest news headlines or performing a system action.\n- chat: Use this for social greetings, polite closures, or general conversational fillers that do not require data retrieval or analysis (e.g., \"Goodnight\").\n\nStrategy:\n1. Social vs. Functional: First, check if the message is a social greeting or \"small talk.\" If so, classify as 'chat'.\n2. Tool Invocation (Skill): If the user is asking for \"the news,\" a \"fix,\" or an action that requires a specific system capability/plugin to execute a task, classify as 'skill_request'.\n3. Static vs. Calculated: \n    - If the request asks for an existing data point (e.g., \"What is the price of X?\"), classify as 'question'.\n    - If the request requires projecting future values, evaluating which of two complex entities is \"better,\" or simulating a scenario, classify as 'complex'.\n4. Financial/Analytical Verbs: Parameters involving \"principal, rate, time\" or verbs like \"analyze,\" \"evaluate,\" and \"forecast\" signal 'complex'.\n\nDomain Specific Rules:\n- News requests (\"최신 뉴스 뭐 있어?\") must be classified as 'skill_request', as they trigger a specific information-gathering skill.\n- Comparisons between unreleased or high-level technologies (e.g., \"GPT-5 vs Gemini 3\") are 'complex'.",
+      "fields": [
+        {
+          "prefix": "User Message:",
+          "description": "User's chat message"
+        },
+        {
+          "prefix": "Intent:",
+          "description": "Exactly one of: chat, question, remember, skill_request, complex"
+        }
+      ]
+    },
+    "lm": null
+  },
+  "metadata": {
+    "dependency_versions": {
+      "python": "3.12",
+      "dspy": "3.1.3",
+      "cloudpickle": "3.1"
+    }
+  }
+}

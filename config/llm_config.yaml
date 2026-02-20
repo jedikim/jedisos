@@ -1,0 +1,7 @@
+# JediSOS LLM 설정
+models:
+  - gpt-5.2
+
+temperature: 0.7
+max_tokens: 8192
+timeout: 60
