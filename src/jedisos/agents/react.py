@@ -157,7 +157,7 @@ class ReActAgent:  # [JS-E001.2]
 
         try:
             result = await asyncio.wait_for(
-                self.memory.recall(query, bank_id=state.get("bank_id")), timeout=3.0
+                self.memory.recall(query, bank_id=state.get("bank_id")), timeout=1.5
             )
             context = result.get("context", "") if isinstance(result, dict) else str(result)
         except TimeoutError:
@@ -426,7 +426,7 @@ class ReActAgent:  # [JS-E001.2]
 
             query = " ".join(reversed(query_parts))
             try:
-                result = await asyncio.wait_for(self.memory.recall(query, bank_id=bid), timeout=3.0)
+                result = await asyncio.wait_for(self.memory.recall(query, bank_id=bid), timeout=1.5)
                 memory_context = (
                     result.get("context", "") if isinstance(result, dict) else str(result)
                 )

@@ -44,6 +44,63 @@ except ImportError:
     _HAS_ZVECSEARCH = False
     ZvecSearch = None  # type: ignore[assignment,misc]
 
+_zvec_patched = False
+
+
+def _patch_zvec_compat() -> None:
+    """zvec 0.2.x / zvecsearch 0.1.0 API 호환성 패치.
+
+    두 가지 문제를 수정합니다:
+    1. Collection.query()에서 query_param 미지원 → 인자 제거
+    2. filter 파서가 '==' 문법 미지원 → 에러 시 빈 결과 반환
+    """
+    global _zvec_patched
+    if _zvec_patched:
+        return
+    _zvec_patched = True
+
+    try:
+        from zvec.model.collection import Collection
+
+        _orig_query = Collection.query
+
+        def _patched_query(
+            self: Collection,
+            vectors: Any = None,
+            **kwargs: Any,
+        ) -> Any:
+            kwargs.pop("query_param", None)
+            return _orig_query(self, vectors, **kwargs)
+
+        Collection.query = _patched_query  # type: ignore[assignment]
+
+        from zvecsearch.store import ZvecStore
+
+        def _safe_hashes_by_source(self: ZvecStore, source: str) -> set[str]:
+            try:
+                safe = self._escape_filter_value(source)
+                results = self._collection.query(
+                    filter=f"source = '{safe}'",
+                    output_fields=["chunk_hash"],
+                )
+                return {doc.field("chunk_hash") for doc in results}
+            except Exception:
+                return set()
+
+        def _safe_delete_by_source(self: ZvecStore, source: str) -> None:
+            try:
+                safe = self._escape_filter_value(source)
+                self._collection.delete_by_filter(f"source = '{safe}'")
+            except Exception:
+                pass
+
+        ZvecStore.hashes_by_source = _safe_hashes_by_source  # type: ignore[assignment]
+        ZvecStore.delete_by_source = _safe_delete_by_source  # type: ignore[assignment]
+
+        logger.info("zvec_compat_patched")
+    except Exception as e:
+        logger.warning("zvec_compat_patch_failed", error=str(e))
+
 
 class ZvecMemory:  # [JS-B001.1]
     """zvecsearch 기반 마크다운 메모리 시스템.
@@ -66,9 +123,10 @@ class ZvecMemory:  # [JS-B001.1]
         # 디렉토리 구조 생성
         self._ensure_dirs()
 
-        # zvecsearch 인덱서 초기화
+        # zvecsearch 인덱서 초기화 (호환성 패치 먼저)
         self._search: Any = None
         if _HAS_ZVECSEARCH:
+            _patch_zvec_compat()
             self._search = ZvecSearch(
                 paths=[str(self.memory_dir)],
                 zvec_path=str(self.zvec_dir / "db"),
@@ -219,7 +277,7 @@ class ZvecMemory:  # [JS-B001.1]
         try:
             results = self._search.search(query, top_k=top_k)
         except Exception as e:
-            logger.error("zvec_search_error", error=str(e))
+            logger.warning("zvec_search_fallback", error=str(e))
             return await self._recall_fallback(query, bid)
 
         # 결과 처리
